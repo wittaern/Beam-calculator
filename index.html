@@ -72,8 +72,11 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid 
 .bar i{display:block;height:100%}
 .bar i.pass{background:var(--shear)} .bar i.fail{background:var(--warn)}
 #steelBox .kv td{font-size:12.5px;padding:3px 6px}
-#rcBox .tag{font-weight:600;color:var(--ink);text-transform:none;letter-spacing:0;font-size:12px}
-.rc-plot{border-color:var(--line);margin-inline:-4px}
+#rcVBox .tag,#rcMBox .tag{font-weight:600;color:var(--ink);text-transform:none;letter-spacing:0;font-size:12px}
+.rc-plot{border-color:var(--line)}
+.box.rc h2{gap:8px}
+.calc-t td{font-size:12.5px!important;padding:4px 6px!important;white-space:nowrap}
+.calc-t th{white-space:nowrap}
 
 .app{display:grid;grid-template-columns:370px minmax(0,1fr);gap:18px;align-items:start}
 @media (max-width:960px){.app{grid-template-columns:minmax(0,1fr)}}
@@ -234,7 +237,20 @@ main{display:flex;flex-direction:column;gap:12px;min-width:0}
       <div id="banner" class="banner" hidden></div>
       <div class="plot"><div class="cap"><strong>Loading diagram</strong><span>P, w เป็นบวกเมื่อชี้ลง · M ที่กระทำ บวกเมื่อตามเข็ม</span></div><svg id="sch"></svg></div>
       <div class="plot"><div class="cap"><strong>Shear force diagram, V (tonf)</strong><span class="rt"><span>+ เมื่อผลรวมแรงด้านซ้ายหน้าตัดชี้ขึ้น</span><span class="tag">factored load</span></span></div><svg id="sv"></svg></div>
+      <section class="box rc" id="rcVBox" hidden>
+        <h2>เหล็กเสริมรับแรงเฉือน — ACI 318 <span id="rcVChip"></span></h2>
+        <div class="steel-in"><label class="f"><span>เกรดเหล็กปลอก</span><select id="fyStir"><option value="SR24">SR24</option><option value="SD40">SD40</option><option value="SD50">SD50</option></select></label><label class="f"><span>d′ (cm)</span><input class="num" id="rcCover" type="number" step="0.5" min="0"></label></div>
+        <div class="plot rc-plot"><div class="cap"><strong>A<sub>v</sub>/s ที่ต้องการ (cm²/m)</strong><span class="rt"><span class="tag">factored load</span></span></div><svg id="sav"></svg></div>
+        <div id="rcVSum"></div>
+      </section>
       <div class="plot"><div class="cap"><strong>Bending moment diagram, M (tonf·m)</strong><span class="rt"><label class="chk"><input type="checkbox" id="flip"> วาดด้านรับแรงดึง (tension side)</label><span class="tag">factored load</span></span></div><svg id="sm"></svg></div>
+      <section class="box rc" id="rcMBox" hidden>
+        <h2>เหล็กเสริมรับโมเมนต์ — ACI 318 <span id="rcMChip"></span></h2>
+        <div class="steel-in"><label class="f"><span>เกรดเหล็กเสริมหลัก</span><select id="fyMain"><option value="SR24">SR24</option><option value="SD40">SD40</option><option value="SD50">SD50</option></select></label><label class="f"><span>d′ (cm)</span><input class="num" id="rcCover2" type="number" step="0.5" min="0"></label></div>
+        <div class="plot rc-plot"><div class="cap"><strong>A<sub>s</sub> ที่ต้องการ (cm²)</strong><span class="rt"><span>+ = เหล็กล่าง · − = เหล็กบน</span><span class="tag">factored load</span></span></div><svg id="sas"></svg></div>
+        <div id="rcMSum"></div>
+        <p class="hint">SR24 f<sub>y</sub> = 2,400 · SD40 = 4,000 · SD50 = 5,000 ksc · d′ = ระยะจากผิวคอนกรีตถึงศูนย์กลางเหล็กรับแรงดึง</p>
+      </section>
       <section class="box" id="steelBox" hidden>
         <h2>ตรวจสอบหน้าตัดเหล็ก — AISC 360-16 LRFD <span class="tag">factored load</span></h2>
         <div class="steel-in">
@@ -245,18 +261,6 @@ main{display:flex;flex-direction:column;gap:12px;min-width:0}
         </div>
         <p class="hint">L<sub>b</sub> = ระยะค้ำยันด้านข้าง (m) · C<sub>b</sub> = 1.0 conservative · เลือก "กรอกค่าเอง" เพื่อใส่ F<sub>y</sub> อื่น</p>
         <div id="steelOut"></div>
-      </section>
-      <section class="box" id="rcBox" hidden>
-        <h2>ออกแบบเหล็กเสริมคอนกรีต — ACI 318 <span class="tag">factored load</span></h2>
-        <div class="steel-in">
-          <label class="f"><span>เหล็กรับโมเมนต์</span><select id="fyMain"><option value="SR24">SR24</option><option value="SD40">SD40</option><option value="SD50">SD50</option></select></label>
-          <label class="f"><span>เหล็กรับแรงเฉือน</span><select id="fyStir"><option value="SR24">SR24</option><option value="SD40">SD40</option><option value="SD50">SD50</option></select></label>
-          <label class="f"><span>d′ (cm)</span><input class="num" id="rcCover" type="number" step="0.5" min="0"></label>
-        </div>
-        <p class="hint">SR24 f<sub>y</sub> = 2,400 · SD40 = 4,000 · SD50 = 5,000 ksc · d′ = ระยะจากผิวคอนกรีตถึงศูนย์กลางเหล็กรับแรงดึง (d = h − d′)</p>
-        <div id="rcSum"></div>
-        <div class="plot rc-plot"><div class="cap"><strong>เหล็กรับแรงเฉือน A<sub>v</sub>/s (cm²/m)</strong></div><svg id="sav"></svg></div>
-        <div class="plot rc-plot"><div class="cap"><strong>เหล็กรับโมเมนต์ A<sub>s</sub> (cm²)</strong><span class="rt"><span>+ = เหล็กล่าง · − = เหล็กบน</span></span></div><svg id="sas"></svg></div>
       </section>
       <div class="plot"><div class="cap"><strong>Deflection, δ (cm)</strong><span class="rt"><span id="eiCap"></span><span class="tag">service load</span></span></div><svg id="sd"></svg></div>
 
@@ -676,9 +680,9 @@ function rcCalc(){
   let bot={v:0,x:0},top={v:0,x:0},av={v:0,x:0},failM=false,failV=false,needV=false;
   sm.forEach((s,i)=>{const a=p.asReq(s.M),q=p.avReq(s.V);if(!a.ok)failM=true;if(!q.ok)failV=true;if(q.zone===2)needV=true;
     if(s.M>0&&a.As>bot.v)bot={v:a.As,x:s.x};if(s.M<0&&a.As>top.v)top={v:a.As,x:s.x};if(q.Av>av.v)av={v:q.Av,x:s.x};});
-  const Vu=Math.max(...sm.map(s=>Math.abs(s.V)));const VsAt=Vu*1000/0.75-p.Vc;
+  let vx=0,Vu=0,mPos=null,mNeg=null;sm.forEach(s=>{if(Math.abs(s.V)>Vu){Vu=Math.abs(s.V);vx=s.x;}if(s.M>0&&(!mPos||s.M>mPos.M))mPos={M:s.M,x:s.x};if(s.M<0&&(!mNeg||s.M<mNeg.M))mNeg={M:s.M,x:s.x};});const VsAt=Vu*1000/0.75-p.Vc;
   const sMax=Math.min(VsAt>1.06*Math.sqrt(p.fc)*p.b*p.d?p.d/4:p.d/2,VsAt>1.06*Math.sqrt(p.fc)*p.b*p.d?30:60);
-  return {...p,As,Av,bot,top,av,failM,failV,needV,Vu,sMax,hasNaN:As.some(a=>!isFinite(a.v))};
+  return {...p,As,Av,bot,top,av,failM,failV,needV,Vu,vx,mPos,mNeg,sMax,hasNaN:As.some(a=>!isFinite(a.v))};
 }
 function rcPlotMarkup(id,c,W){
   if(id==='sas'){const pts=c.As.map(a=>({x:a.x,v:isFinite(a.v)?a.v:0}));const m=diagramMarkup(pts,'var(--moment)',W,{flip:S.flip,h:170});
@@ -689,49 +693,56 @@ function rcPlotMarkup(id,c,W){
   if(c.AvMin>0){const y=m.sy(c.AvMin);if(y>18&&y<m.H-18){g+=ln(PL,y,W-PR,y,'var(--muted)',1,'stroke-dasharray="5 4"');g+=tx(W-PR-4,y-4,`(Av/s)min = ${fmt(c.AvMin,2)}`,'var(--muted)','end');}}
   return {...m,g};
 }
+function rcRowsV(c){
+  const sq=Math.sqrt(c.fc),VsU=Math.max(0,c.Vu*1000/0.75-c.Vc),AvU=c.avReq(c.Vu);
+  return [
+    ['d','h − d′',`${fmt(c.h,1)} − ${fmt(c.dc,1)}`,fmt(c.d,1),'cm'],
+    ['V<sub>c</sub>','0.53√fc′·b·d',`0.53 × √${fmtI(c.fc)} × ${fmt(c.b,1)} × ${fmt(c.d,1)}`,fmt(c.Vc/1000,3),'tonf'],
+    ['φV<sub>c</sub>','0.75·V<sub>c</sub>','',fmt(c.phiVc/1000,3),'tonf'],
+    ['φV<sub>c</sub>/2','','',fmt(c.phiVc/2000,3),'tonf'],
+    ['(A<sub>v</sub>/s)<sub>min</sub>','max(0.2√fc′, 3.5)·b/f<sub>yt</sub>',`max(${fmt(0.2*sq,2)}, 3.5) × ${fmt(c.b,1)} / ${fmtI(c.fyt)}`,fmt(c.AvMin,2),'cm²/m'],
+    ['V<sub>u,max</sub>','จากกราฟ',`ที่ x = ${fmt(c.vx)} m`,fmt(c.Vu,3),'tonf'],
+    ['V<sub>s</sub>','V<sub>u</sub>/φ − V<sub>c</sub>',`${fmt(c.Vu,3)}/0.75 − ${fmt(c.Vc/1000,3)}`,fmt(VsU/1000,3),'tonf'],
+    ['V<sub>s,max</sub>','2.1√fc′·b·d','',fmt(c.VsMax/1000,3),'tonf'],
+    ['A<sub>v</sub>/s','V<sub>s</sub>/(f<sub>yt</sub>·d) ≥ (A<sub>v</sub>/s)<sub>min</sub>',AvU.zone===0?'V<sub>u</sub> ≤ φV<sub>c</sub>/2 ไม่ต้องเสริม':AvU.zone===1?'V<sub>u</sub> ≤ φV<sub>c</sub> ใช้ค่าขั้นต่ำ':`${fmt(VsU,0)} / (${fmtI(c.fyt)} × ${fmt(c.d,1)}) × 100`,fmt(AvU.Av,2),'cm²/m'],
+    ['s<sub>max</sub>',VsU>1.06*sq*c.b*c.d?'min(d/4, 30 cm)':'min(d/2, 60 cm)','',fmt(c.sMax,1),'cm']];
+}
+function rcRowsM(c){
+  const rows=[['d','h − d′',`${fmt(c.h,1)} − ${fmt(c.dc,1)}`,fmt(c.d,1),'cm'],['β<sub>1</sub>','0.85 − 0.05(fc′ − 280)/70','0.65 ≤ β<sub>1</sub> ≤ 0.85',fmt(c.b1,3),''],
+    ['A<sub>s,min</sub>','max(0.8√fc′/f<sub>y</sub>, 14/f<sub>y</sub>)·b·d','',fmt(c.AsMin,2),'cm²'],
+    ['A<sub>s,max</sub>','0.85β<sub>1</sub>fc′/f<sub>y</sub> × 3/8 × b·d','ε<sub>t</sub> = 0.005 (tension-controlled)',fmt(c.AsMax,2),'cm²']];
+  [['M+ (เหล็กล่าง)',c.mPos],['M− (เหล็กบน)',c.mNeg]].forEach(([lab,m])=>{if(!m||Math.abs(m.M)<1e-9)return;
+    const Mu=Math.abs(m.M)*1e5,Rn=Mu/(0.9*c.b*c.d*c.d),disc=1-2*Rn/(0.85*c.fc),rho=disc<0?NaN:0.85*c.fc/c.fy*(1-Math.sqrt(disc)),As=rho*c.b*c.d;
+    rows.push([`<b>${lab}</b>`,'',`ที่ x = ${fmt(m.x)} m`,'','']);
+    rows.push(['M<sub>u</sub>','จากกราฟ','',fmt(Math.abs(m.M),3),'tonf·m']);
+    rows.push(['R<sub>n</sub>','M<sub>u</sub>/(φ·b·d²), φ = 0.9',`${fmt(Mu,0)} / (0.9 × ${fmt(c.b,1)} × ${fmt(c.d,1)}²)`,fmt(Rn,2),'ksc']);
+    rows.push(['ρ','0.85fc′/f<sub>y</sub>·(1 − √(1 − 2R<sub>n</sub>/0.85fc′))','',isFinite(rho)?rho.toFixed(5):'หาค่าไม่ได้','']);
+    rows.push(['A<sub>s</sub>','ρ·b·d',isFinite(As)&&As>c.AsMax?'เกิน A<sub>s,max</sub>':'',isFinite(As)?fmt(As,2):'—','cm²']);});
+  return rows;
+}
+const rcTable=rows=>`<div class="scroll"><table class="kv calc-t"><tr><th>รายการ</th><th style="text-align:left">สูตร</th><th style="text-align:left">แทนค่า</th><th>ค่า</th><th style="text-align:left">หน่วย</th></tr>${rows.map(r=>`<tr><td class="t">${r[0]}</td><td class="t" style="text-align:left">${r[1]}</td><td class="t" style="text-align:left;color:var(--muted)">${r[2]}</td><td>${r[3]}</td><td class="t" style="text-align:left;color:var(--muted)">${r[4]}</td></tr>`).join('')}</table></div>`;
 function renderRC(){
-  const box=$('#rcBox');const on=rcOn()&&R.stable;box.hidden=!on;if(!on)return;
-  $('#rcCover').value=document.activeElement===$('#rcCover')?$('#rcCover').value:S.rcCover;$('#fyMain').value=S.fyMain;$('#fyStir').value=S.fyStir;
-  const c=rcCalc(),out=$('#rcSum');
-  if(!c||c.err){out.innerHTML=`<div class="empty">${c?c.err:''}</div>`;['sas','sav'].forEach(id=>{$('#'+id).innerHTML='';});return;}
+  const on=rcOn()&&R.stable;$('#rcVBox').hidden=!on;$('#rcMBox').hidden=!on;if(!on)return;
+  ['rcCover','rcCover2'].forEach(id=>{const el=$('#'+id);if(document.activeElement!==el)el.value=S.rcCover;});$('#fyMain').value=S.fyMain;$('#fyStir').value=S.fyStir;
+  const c=rcCalc();
+  if(!c||c.err){$('#rcVSum').innerHTML=$('#rcMSum').innerHTML=`<div class="empty">${c?c.err:''}</div>`;['sas','sav'].forEach(id=>{$('#'+id).innerHTML='';});return;}
   ['sas','sav'].forEach(id=>{const svg=$('#'+id),W=plotW(svg),m=rcPlotMarkup(id,c,W);
     svg.setAttribute('width',W);svg.setAttribute('height',m.H);svg.setAttribute('viewBox',`0 0 ${W} ${m.H}`);svg.innerHTML=m.g+`<g id="xh-${id}"></g>`;svg._sy=m.sy;svg._sgn=m.sgn;});
   const chipV=c.failV?'<span class="chip fail">หน้าตัดเล็กเกินไป</span>':c.needV?'<span class="chip fail">ต้องเสริมเหล็กรับแรงเฉือน</span>':'<span class="chip pass">คอนกรีตรับได้</span>';
   const chipM=c.failM?'<span class="chip fail">เกิน tension-controlled</span>':'<span class="chip pass">Singly reinforced ได้</span>';
-  out.innerHTML=`<div class="steel-grid">
-   <div class="chk-card"><div class="ck-h"><b>Shear</b>${chipV}</div>
-    <div class="ck-n"><div><span>V<sub>u,max</sub> = ${fmt(c.Vu,3)} tonf</span></div><div><span>φV<sub>c</sub> = ${fmt(c.phiVc/1000,3)} tonf</span></div><div><span>(A<sub>v</sub>/s)<sub>max</sub> = ${fmt(c.av.v,2)} cm²/m @ x = ${fmt(c.av.x)} m</span></div></div>
-    <div class="ck-r"><small>V<sub>c</sub> = 0.53√fc′·b·d · φ = 0.75 · f<sub>yt</sub> = ${fmtI(c.fyt)} ksc${c.fytRaw>4200?' (จำกัดที่ 4,200 ตาม ACI)':''} · s<sub>max</sub> = ${fmt(c.sMax,1)} cm</small></div></div>
-   <div class="chk-card"><div class="ck-h"><b>Moment</b>${chipM}</div>
-    <div class="ck-n"><div><span>A<sub>s</sub> ล่าง (M+) = ${fmt(c.bot.v,2)} cm² @ x = ${fmt(c.bot.x)} m</span></div><div><span>A<sub>s</sub> บน (M−) = ${fmt(c.top.v,2)} cm² @ x = ${fmt(c.top.x)} m</span></div><div><span>A<sub>s,min</sub> = ${fmt(c.AsMin,2)} · A<sub>s,max</sub> = ${fmt(c.AsMax,2)} cm²</span></div></div>
-    <div class="ck-r"><small>d = ${fmt(c.d,1)} cm · φ = 0.9 · f<sub>y</sub> = ${fmtI(c.fy)} ksc · β<sub>1</sub> = ${fmt(c.b1,3)} · A<sub>s,max</sub> ที่ ε<sub>t</sub> = 0.005</small></div></div></div>
-   <p class="hint">${c.failM?'ช่วงที่ A<sub>s</sub> เกิน A<sub>s,max</sub> (หรือหาค่าไม่ได้) ต้องใช้เหล็กรับแรงอัดหรือขยายหน้าตัด · ':''}${c.failV?'V<sub>s</sub> เกิน 2.1√fc′·b·d ต้องขยายหน้าตัด · ':''}ใช้ V<sub>u</sub> และ M<sub>u</sub> ตลอดคาน (ไม่ลดค่าที่ระยะ d จากหน้า support) · A<sub>s,min</sub> = max(0.8√fc′/f<sub>y</sub>, 14/f<sub>y</sub>)·b·d</p>`;
+  $('#rcVChip').innerHTML=chipV;$('#rcMChip').innerHTML=chipM;
+  $('#rcVSum').innerHTML=rcTable(rcRowsV(c))+`<p class="hint">${c.fytRaw>4200?'SD50 คิด f<sub>yt</sub> = 4,200 ksc ตามข้อจำกัด ACI · ':''}${c.failV?'V<sub>s</sub> เกิน V<sub>s,max</sub> ต้องขยายหน้าตัด · ':''}ใช้ V<sub>u</sub> ตลอดคาน ไม่ลดค่าที่ระยะ d จากหน้า support</p>`;
+  $('#rcMSum').innerHTML=rcTable(rcRowsM(c))+`<p class="hint">${c.failM?'ช่วงที่ A<sub>s</sub> เกิน A<sub>s,max</sub> ต้องใช้เหล็กรับแรงอัดหรือขยายหน้าตัด · ':''}หน้าตัดสี่เหลี่ยม เหล็กรับแรงดึงชั้นเดียว</p>`;
 }
-function rcReportHTML(n,imgs){
-  if(!rcOn())return '';const c=rcCalc();if(!c||c.err)return '';const ok=x=>x?'<b class="ok">OK</b>':'<b class="bad">NG</b>';
-  return `<div class="rs"><h3>${n}. ออกแบบเหล็กเสริมคอนกรีต — ACI 318 (strength design)</h3>
-   <div class="two"><div><table><tr><th class="l">ข้อมูล</th><th>ค่า</th><th class="l">หน่วย</th></tr>
-     <tr><td class="t">b × h</td><td>${fmt(c.b,1)} × ${fmt(c.h,1)}</td><td class="t l">cm</td></tr>
-     <tr><td class="t">d = h − d′</td><td>${fmt(c.d,1)}</td><td class="t l">cm</td></tr>
-     <tr><td class="t">fc′</td><td>${fmtI(c.fc)}</td><td class="t l">ksc</td></tr>
-     <tr><td class="t">f<sub>y</sub> เหล็กรับโมเมนต์ (${S.fyMain})</td><td>${fmtI(c.fy)}</td><td class="t l">ksc</td></tr>
-     <tr><td class="t">f<sub>yt</sub> เหล็กรับแรงเฉือน (${S.fyStir})</td><td>${fmtI(c.fyt)}</td><td class="t l">ksc</td></tr>
-     <tr><td class="t">β<sub>1</sub></td><td>${fmt(c.b1,3)}</td><td class="t l"></td></tr></table></div>
-   <div><table><tr><th class="l">ผลลัพธ์</th><th>ค่า</th><th class="l">หน่วย</th></tr>
-     <tr><td class="t">V<sub>u,max</sub></td><td>${fmt(c.Vu,3)}</td><td class="t l">tonf</td></tr>
-     <tr><td class="t">φV<sub>c</sub> = 0.75·0.53√fc′·b·d</td><td>${fmt(c.phiVc/1000,3)}</td><td class="t l">tonf</td></tr>
-     <tr><td class="t">(A<sub>v</sub>/s)<sub>max</sub></td><td>${fmt(c.av.v,2)}</td><td class="t l">cm²/m</td></tr>
-     <tr><td class="t">s<sub>max</sub></td><td>${fmt(c.sMax,1)}</td><td class="t l">cm</td></tr>
-     <tr><td class="t">A<sub>s</sub> ล่าง (M+)</td><td>${fmt(c.bot.v,2)}</td><td class="t l">cm²</td></tr>
-     <tr><td class="t">A<sub>s</sub> บน (M−)</td><td>${fmt(c.top.v,2)}</td><td class="t l">cm²</td></tr>
-     <tr><td class="t">A<sub>s,min</sub> / A<sub>s,max</sub></td><td>${fmt(c.AsMin,2)} / ${fmt(c.AsMax,2)}</td><td class="t l">cm²</td></tr>
-     <tr><td class="t">Shear / Moment</td><td>${ok(!c.failV)} / ${ok(!c.failM)}</td><td class="t l"></td></tr></table></div></div>
-   <div class="cap">เหล็กเสริมรับแรงเฉือนที่ต้องการ A<sub>v</sub>/s (cm²/m) — ${c.needV?'คอนกรีตรับไม่พอบางช่วง':'คอนกรีตรับแรงเฉือนได้ (เสริมขั้นต่ำเมื่อ V<sub>u</sub> > φV<sub>c</sub>/2)'}</div><img src="${imgs.sav}" alt="">
-   <div class="cap">เหล็กเสริมรับโมเมนต์ที่ต้องการ A<sub>s</sub> (cm²) — ${S.flip?'วาดด้านรับแรงดึง':'บวก = เหล็กล่าง, ลบ = เหล็กบน'}</div><img src="${imgs.sas}" alt=""></div>`;
-}
-$('#rcBox').addEventListener('input',e=>{const t=e.target;
+const rcRepTable=rows=>`<table><tr><th class="l">รายการ</th><th class="l">สูตร</th><th class="l">แทนค่า</th><th>ค่า</th><th class="l">หน่วย</th></tr>${rows.map(r=>`<tr><td class="t">${r[0]}</td><td class="t l">${r[1]}</td><td class="t l" style="color:#5a6672">${r[2]}</td><td>${r[3]}</td><td class="t l">${r[4]}</td></tr>`).join('')}</table>`;
+function rcShearReport(n,imgs){if(!rcOn())return '';const c=rcCalc();if(!c||c.err||!imgs.sav)return '';
+  return `<div class="rs"><h3>${n} เหล็กเสริมรับแรงเฉือน A<sub>v</sub>/s (cm²/m) — ACI 318 · ${S.fyStir} <b class="${c.failV?'bad':'ok'}">${c.failV?'NG':'OK'}</b></h3><img src="${imgs.sav}" alt="">${rcRepTable(rcRowsV(c))}</div>`;}
+function rcMomentReport(n,imgs){if(!rcOn())return '';const c=rcCalc();if(!c||c.err||!imgs.sas)return '';
+  return `<div class="rs"><h3>${n} เหล็กเสริมรับโมเมนต์ A<sub>s</sub> (cm²) — ACI 318 · ${S.fyMain} <b class="${c.failM?'bad':'ok'}">${c.failM?'NG':'OK'}</b></h3><img src="${imgs.sas}" alt=""><div class="cap">${S.flip?'วาดด้านรับแรงดึง':'บวก = เหล็กล่าง, ลบ = เหล็กบน'}</div>${rcRepTable(rcRowsM(c))}</div>`;}
+['rcVBox','rcMBox'].forEach(b=>$('#'+b).addEventListener('input',e=>{const t=e.target;
   if(t.id==='fyMain'||t.id==='fyStir'){S[t.id]=t.value;save();renderRC();return;}
-  if(t.id==='rcCover'){const v=parseFloat(t.value);if(isNaN(v))return;S.rcCover=v;save();renderRC();}});
+  if(t.id==='rcCover'||t.id==='rcCover2'){const v=parseFloat(t.value);if(isNaN(v))return;S.rcCover=v;save();renderRC();}}));
+
 
 const fmt=(v,d=2)=>{if(!isFinite(v))return'—';const s=(Math.abs(v)<0.5*Math.pow(10,-d)?0:v).toFixed(d);return s.replace('-','−');};
 const fmtSci=v=>{if(!isFinite(v)||v===0)return '0';const e=Math.floor(Math.log10(Math.abs(v)));const sup='⁰¹²³⁴⁵⁶⁷⁸⁹';return (v/Math.pow(10,e)).toFixed(3)+' × 10'+String(e).split('').map(c=>c==='-'?'⁻':sup[c]).join('');};
@@ -1014,10 +1025,12 @@ async function buildReport(){
     <table><tr><th class="l">Support</th><th>x (m)</th><th>R<sub>y</sub> (tonf) ↑+</th><th>M<sub>R</sub> (tonf·m) ทวนเข็ม +</th></tr>${rows(sorted,s=>`<tr><td class="t">${cap1(s.type)}</td><td>${fmt(s.xc)}</td><td>${fmt(s.Fy,3)}</td><td>${s.type==='fixed'?fmt(s.Mr,3):'—'}</td></tr>`)}</table>
     <p style="margin-top:6px">ตรวจสมดุล (factored): ΣR<sub>y</sub> = ${fmt(R.sumR,3)} tonf, Σ น้ำหนัก = ${fmt(R.sumLoad,3)} tonf (ΣP = ${fmt(R.sumLoad-R.W,3)}, Σw = ${fmt(R.W,3)}) · ΣM รอบ x = 0 = ${fmt(R.sumM0,4)} tonf·m <b class="${ok?'ok':'bad'}">${ok?'สมดุล OK':'ไม่สมดุล'}</b></p></div>
   <div class="rs"><h3>4. Shear force diagram, V<sub>u</sub> (tonf) — factored load</h3><img src="${imgs.sv}" alt=""></div>
+  ${rcShearReport('4.1',imgs)}
   <div class="rs"><h3>5. Bending moment diagram, M<sub>u</sub> (tonf·m) — factored load</h3><img src="${imgs.sm}" alt=""><div class="cap">${S.flip?'วาดด้านรับแรงดึง (tension side): โมเมนต์บวกอยู่ใต้แกน':'โมเมนต์บวก (sagging) อยู่เหนือแกน'}</div></div>
-  ${steelReportHTML(6)}${rcReportHTML(6,imgs)}
-  <div class="rs"><h3>${STEEL.includes(S.Itype)||rcOn()?7:6}. Deflection, δ (cm) — service load</h3><img src="${imgs.sd}" alt=""></div>
-  <div class="rs"><h3>${STEEL.includes(S.Itype)||rcOn()?8:7}. สรุปค่าสูงสุด</h3>
+  ${rcMomentReport('5.1',imgs)}
+  ${steelReportHTML(6)}
+  <div class="rs"><h3>${STEEL.includes(S.Itype)?7:6}. Deflection, δ (cm) — service load</h3><img src="${imgs.sd}" alt=""></div>
+  <div class="rs"><h3>${STEEL.includes(S.Itype)?8:7}. สรุปค่าสูงสุด</h3>
     <table><tr><th class="l">รายการ</th><th>ค่า</th><th class="l">หน่วย</th><th>ที่ x (m)</th></tr>
       <tr><td class="t">V<sub>max</sub> (+)</td><td>${fmt(e.vM.V,3)}</td><td class="t l">tonf</td><td>${fmt(e.vM.x)}</td></tr>
       <tr><td class="t">V<sub>min</sub> (−)</td><td>${fmt(e.vm.V,3)}</td><td class="t l">tonf</td><td>${fmt(e.vm.x)}</td></tr>
