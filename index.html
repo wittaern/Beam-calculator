@@ -54,6 +54,22 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid 
 .calc{font-family:var(--f-mono);font-size:13px;font-variant-numeric:tabular-nums;background:var(--soft);border-radius:6px;padding:6px 9px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .calc span{color:var(--muted);font-family:var(--f-body);font-size:12px}
 .calc.err{color:var(--warn)}
+#steelBox h2 .tag{font-weight:600;color:var(--ink);text-transform:none;letter-spacing:0;font-size:12px}
+.steel-in{display:grid;grid-template-columns:repeat(3,minmax(0,140px));gap:8px}
+.steel-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.chk-card{border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.ck-h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ck-h b{font-size:13px}
+.ck-n{display:flex;flex-direction:column;gap:2px;font-family:var(--f-mono);font-size:13px;font-variant-numeric:tabular-nums}
+.ck-r{font-size:12px;color:var(--muted);font-family:var(--f-mono)}
+.ck-r small{font-family:var(--f-body);font-size:11.5px}
+.chip{font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:999px}
+.chip.pass{background:color-mix(in srgb,var(--shear) 16%,transparent);color:var(--shear)}
+.chip.fail{background:var(--warn-bg);color:var(--warn)}
+.bar{height:6px;border-radius:3px;background:var(--grid);overflow:hidden}
+.bar i{display:block;height:100%}
+.bar i.pass{background:var(--shear)} .bar i.fail{background:var(--warn)}
+#steelBox .kv td{font-size:12.5px;padding:3px 6px}
 
 .app{display:grid;grid-template-columns:370px minmax(0,1fr);gap:18px;align-items:start}
 @media (max-width:960px){.app{grid-template-columns:minmax(0,1fr)}}
@@ -215,6 +231,16 @@ main{display:flex;flex-direction:column;gap:12px;min-width:0}
       <div class="plot"><div class="cap"><strong>Loading diagram</strong><span>P, w เป็นบวกเมื่อชี้ลง · M ที่กระทำ บวกเมื่อตามเข็ม</span></div><svg id="sch"></svg></div>
       <div class="plot"><div class="cap"><strong>Shear force diagram, V (tonf)</strong><span class="rt"><span>+ เมื่อผลรวมแรงด้านซ้ายหน้าตัดชี้ขึ้น</span><span class="tag">factored load</span></span></div><svg id="sv"></svg></div>
       <div class="plot"><div class="cap"><strong>Bending moment diagram, M (tonf·m)</strong><span class="rt"><label class="chk"><input type="checkbox" id="flip"> วาดด้านรับแรงดึง (tension side)</label><span class="tag">factored load</span></span></div><svg id="sm"></svg></div>
+      <section class="box" id="steelBox" hidden>
+        <h2>ตรวจสอบหน้าตัดเหล็ก — AISC 360-16 LRFD <span class="tag">factored load</span></h2>
+        <div class="steel-in">
+          <label class="f">F<sub>y</sub> (ksc)<input class="num" id="Fy" type="number" step="50" min="0"></label>
+          <label class="f">L<sub>b</sub> ระยะค้ำยันด้านข้าง (m)<input class="num" id="Lb" type="number" step="0.1" min="0"></label>
+          <label class="f">C<sub>b</sub><input class="num" id="Cb" type="number" step="0.05" min="1"></label>
+        </div>
+        <p class="hint">SS400 ≈ 2,500 ksc (245 MPa) · SM520 ≈ 3,600 ksc (355 MPa) · A36 ≈ 2,530 ksc · C<sub>b</sub> = 1.0 conservative</p>
+        <div id="steelOut"></div>
+      </section>
       <div class="plot"><div class="cap"><strong>Deflection, δ (cm)</strong><span class="rt"><span id="eiCap"></span><span class="tag">service load</span></span></div><svg id="sd"></svg></div>
 
       <div class="res">
@@ -361,7 +387,7 @@ const PRESETS={
   overhang:{L:8,s:[[0,'pin'],[6,'roller']],p:[[8,2]],d:[[0,6,1,1]],m:[[3,1.5]]},
   fixed:{L:6,s:[[0,'fixed'],[6,'fixed']],p:[[2,4]],d:[],m:[]}
 };
-let S={secUnit:'cm',cSwap2:true,L:10,E:233928,I:260417,Emode:'concrete',fc:240,Eman:233928,Itype:'rect',Iman:260417,sec:{},snap:0.05,flip:false,tool:'pin',proj:'',member:'',by:'',supports:[],points:[],dists:[],moments:[]};
+let S={Fy:2500,Cb:1,secUnit:'cm',cSwap2:true,L:10,E:233928,I:260417,Emode:'concrete',fc:240,Eman:233928,Itype:'rect',Iman:260417,sec:{},snap:0.05,flip:false,tool:'pin',proj:'',member:'',by:'',supports:[],points:[],dists:[],moments:[]};
 function loadPreset(k){const p=PRESETS[k];S.L=p.L;
   S.supports=p.s.map(([x,type])=>({id:nid(),x,type}));S.points=p.p.map(([x,P])=>({id:nid(),x,P,f:1}));
   S.dists=p.d.map(([a,b,w1,w2])=>({id:nid(),a,b,w1,w2,f:1}));S.moments=p.m.map(([x,M])=>({id:nid(),x,M,f:1}));}
@@ -455,6 +481,144 @@ function drawSec(){const sk=$('#secsk');if(S.Itype==='manual'){sk.innerHTML='';r
   sk.innerHTML=`<g transform="translate(${ox} ${oy}) scale(${sc})"><path d="${sh.d}" fill-rule="evenodd" style="fill:var(--accent);fill-opacity:.28;stroke:var(--accent);stroke-width:${1.2/sc}"/></g>`
     +`<line x1="6" x2="106" y1="${yb}" y2="${yb}" style="stroke:var(--load);stroke-width:1" stroke-dasharray="4 3"/><text x="104" y="${yb-3}" text-anchor="end" style="fill:var(--load);font-size:9px;font-family:var(--f-mono)">x</text>`;}
 
+/* ---------- Steel section check — AISC 360-16 LRFD (units: kg, cm) ---------- */
+const STEEL=['box','pipe','wf','c','l','t','plate','ch'];
+const ES=2.04e6;
+function secRects(t,v){
+  switch(t){
+    case 'box':return [[0,0,v.B,v.t],[0,v.H-v.t,v.B,v.t],[0,v.t,v.t,v.H-2*v.t],[v.B-v.t,v.t,v.t,v.H-2*v.t]];
+    case 'wf':return [[0,0,v.B,v.tf],[0,v.H-v.tf,v.B,v.tf],[(v.B-v.tw)/2,v.tf,v.tw,v.H-2*v.tf]];
+    case 'c':return [[0,0,v.B,v.tf],[0,v.H-v.tf,v.B,v.tf],[0,v.tf,v.tw,v.H-2*v.tf]];
+    case 'l':return [[0,0,v.t,v.A-v.t],[0,v.A-v.t,v.B,v.t]];
+    case 't':return [[0,0,v.B,v.tf],[(v.B-v.tw)/2,v.tf,v.tw,v.H-v.tf]];
+    case 'plate':return v.o==='edge'?[[0,0,v.t,v.b]]:[[0,0,v.b,v.t]];
+    case 'ch':return [[0,0,v.t,v.H],[v.t,0,v.B-v.t,v.t],[v.t,v.H-v.t,v.B-v.t,v.t],[v.B-v.t,v.t,v.t,v.C-v.t],[v.B-v.t,v.H-v.C,v.t,v.C-v.t]];
+  }
+}
+function rectProps(rs){
+  let A=0,my=0,mx=0;rs.forEach(([x,y,w,h])=>{const a=w*h;A+=a;my+=a*(y+h/2);mx+=a*(x+w/2);});
+  const yb=my/A,xb=mx/A;let Ix=0,Iy=0;
+  rs.forEach(([x,y,w,h])=>{const a=w*h;Ix+=w*h**3/12+a*(y+h/2-yb)**2;Iy+=h*w**3/12+a*(x+w/2-xb)**2;});
+  const H=Math.max(...rs.map(r=>r[1]+r[3]));
+  const above=yp=>rs.reduce((s,[x,y,w,h])=>s+w*Math.max(0,Math.min(h,yp-y)),0);
+  let lo=0,hi=H;for(let i=0;i<80;i++){const m=(lo+hi)/2;if(above(m)<A/2)lo=m;else hi=m;}
+  const yp=(lo+hi)/2;let Z=0;
+  rs.forEach(([x,y,w,h])=>{const y1=y+h;
+    if(y<yp){const e=Math.min(y1,yp);Z+=w*((yp-y)**2-(yp-e)**2)/2;}
+    if(y1>yp){const s0=Math.max(y,yp);Z+=w*((y1-yp)**2-(s0-yp)**2)/2;}});
+  return {A,Ix,Iy,yb,H,Stop:Ix/yb,Sbot:Ix/(H-yb),Z,rx:Math.sqrt(Ix/A),ry:Math.sqrt(Iy/A)};
+}
+function Cv2(lam,kv,Fy){const a=1.10*Math.sqrt(kv*ES/Fy),b=1.37*Math.sqrt(kv*ES/Fy);return lam<=a?1:lam<=b?a/lam:1.51*kv*ES/(lam*lam*Fy);}
+function steelCheck(){
+  const t=S.Itype;if(!STEEL.includes(t))return null;
+  const v=secVals(t),def=SECS[t];
+  if(def.p.filter(p=>p[0]!=='o').some(p=>!(+v[p[0]]>0))||!def.ok(v))return {err:'พารามิเตอร์หน้าตัดไม่ถูกต้อง'};
+  const Fy=+S.Fy,Lb=Math.max(0,+S.Lb||0)*100,Cb=Math.max(1,+S.Cb||1),rt=Math.sqrt(ES/Fy);
+  if(!(Fy>0))return {err:'กรอกค่า Fy'};
+  let P;
+  if(t==='pipe'){const D=v.D,d=D-2*v.t,I=Math.PI/64*(D**4-d**4),A=Math.PI/4*(D*D-d*d);P={A,Ix:I,Iy:I,Stop:I/(D/2),Sbot:I/(D/2),Z:(D**3-d**3)/6,rx:Math.sqrt(I/A),ry:Math.sqrt(I/A),H:D};}
+  else P=rectProps(secRects(t,v));
+  const Sx=Math.min(P.Stop,P.Sbot),Mp=Fy*P.Z,My=Fy*Sx,rows=[],notes=[];let Vn,phiV=0.9,shearTxt,Mn,gov='Yielding',simple=false;
+  const lim=(name,lam,lp,lr)=>{rows.push({name,lam,lp,lr,cls:lam<=lp?'Compact':lr==null||lam<=lr?'Noncompact':'Slender'});};
+  // ---- shear ----
+  if(t==='wf'||t==='c'){const h=v.H-2*v.tf,lam=h/v.tw,Aw=v.H*v.tw;
+    if(t==='wf'&&lam<=2.24*rt){phiV=1.0;Vn=0.6*Fy*Aw;shearTxt=`h/tw = ${fmt(lam,1)} ≤ 2.24√(E/Fy) → φv = 1.0, Cv1 = 1`;}
+    else{const a=1.10*Math.sqrt(5.34*ES/Fy),cv=lam<=a?1:a/lam;Vn=0.6*Fy*Aw*cv;shearTxt=`h/tw = ${fmt(lam,1)}, kv = 5.34 → Cv1 = ${fmt(cv,3)}`;}
+    shearTxt=`Aw = d·tw = ${fmt(Aw,2)} cm² · `+shearTxt;}
+  else if(t==='box'){const h=v.H-3*v.t,lam=h/v.t,Aw=2*h*v.t,cv=Cv2(lam,5,Fy);Vn=0.6*Fy*Aw*cv;shearTxt=`Aw = 2ht = ${fmt(Aw,2)} cm² (h = H − 3t) · h/t = ${fmt(lam,1)} → Cv2 = ${fmt(cv,3)}`;}
+  else if(t==='pipe'){Vn=0.6*Fy*P.A/2;shearTxt=`Vn = 0.6Fy·Ag/2 (G5, ไม่คิด Lv)`;}
+  else if(t==='l'){const lam=v.A/v.t,cv=Cv2(lam,1.2,Fy);Vn=0.6*Fy*v.A*v.t*cv;shearTxt=`ขาตั้ง b·t = ${fmt(v.A*v.t,2)} cm² · b/t = ${fmt(lam,1)}, kv = 1.2 → Cv2 = ${fmt(cv,3)}`;}
+  else if(t==='t'){const lam=v.H/v.tw,cv=Cv2(lam,1.2,Fy);Vn=0.6*Fy*v.H*v.tw*cv;shearTxt=`d·tw = ${fmt(v.H*v.tw,2)} cm² · d/tw = ${fmt(lam,1)}, kv = 1.2 → Cv2 = ${fmt(cv,3)}`;}
+  else if(t==='plate'){Vn=0.6*Fy*P.A;shearTxt=`Vn = 0.6Fy·A (หน้าตัดตัน)`;}
+  else if(t==='ch'){const h=v.H-2*v.t,lam=h/v.t,cv=Cv2(lam,5.34,Fy);Vn=0.6*Fy*v.H*v.t*cv;shearTxt=`H·t = ${fmt(v.H*v.t,2)} cm² · h/t = ${fmt(lam,1)} → Cv2 = ${fmt(cv,3)}`;notes.push('เหล็กรีดเย็น: ค่าประมาณตาม AISC ควรตรวจละเอียดตาม AISI S100');}
+  // ---- flexure ----
+  if(t==='wf'||t==='c'){
+    const h=v.H-2*v.tf,lw=h/v.tw,lf=t==='wf'?v.B/(2*v.tf):v.B/v.tf,lpf=0.38*rt,lrf=1.0*rt,lpw=3.76*rt,lrw=5.70*rt;
+    lim(t==='wf'?'Flange bf/2tf':'Flange bf/tf',lf,lpf,lrf);lim('Web h/tw',lw,lpw,lrw);
+    const ho=v.H-v.tf,J=(2*v.B*v.tf**3+ho*v.tw**3)/3;let Cw,c;
+    if(t==='wf'){Cw=P.Iy*ho*ho/4;c=1;}
+    else{const bp=v.B-v.tw/2;Cw=v.tf*bp**3*ho*ho/12*(3*bp*v.tf+2*ho*v.tw)/(6*bp*v.tf+ho*v.tw);c=ho/2*Math.sqrt(P.Iy/Cw);}
+    const rts=Math.sqrt(Math.sqrt(P.Iy*Cw)/Sx),Lp=1.76*P.ry*rt,jc=J*c/(Sx*ho);
+    const Lr=1.95*rts*ES/(0.7*Fy)*Math.sqrt(jc+Math.sqrt(jc*jc+6.76*(0.7*Fy/ES)**2));
+    let base=Mp;if(lw>lpw){base=My;notes.push(lw>lrw?'Web slender — เกินขอบเขตโปรแกรม ใช้ Mn = Fy·Sx (ไม่ปลอดภัยแน่นอน)':'Web noncompact — ใช้ Mn ≤ Fy·Sx แบบ conservative แทน F4');}
+    let Mltb=base;
+    if(Lb>Lp){if(Lb<=Lr)Mltb=Math.min(base,Cb*(Mp-(Mp-0.7*Fy*Sx)*(Lb-Lp)/(Lr-Lp)));
+      else{const s=Lb/rts,Fcr=Cb*Math.PI**2*ES/(s*s)*Math.sqrt(1+0.078*jc*s*s);Mltb=Math.min(base,Fcr*Sx);}}
+    let Mflb=base;
+    if(lf>lpf){if(lf<=lrf)Mflb=Math.min(base,Mp-(Mp-0.7*Fy*Sx)*(lf-lpf)/(lrf-lpf));
+      else{const kc=Math.min(0.76,Math.max(0.35,4/Math.sqrt(lw)));Mflb=0.9*ES*kc*Sx/(lf*lf);}}
+    Mn=Math.min(base,Mltb,Mflb);gov=Mn===Mltb&&Mltb<base?'Lateral-torsional buckling':Mn===Mflb&&Mflb<base?'Flange local buckling':lw>lpw?'Yielding (Fy·Sx)':'Yielding (Fy·Zx)';
+    P.extra=[['J',J,'cm⁴'],['C<sub>w</sub>',Cw,'cm⁶'],['r<sub>ts</sub>',rts,'cm'],['L<sub>p</sub>',Lp/100,'m'],['L<sub>r</sub>',Lr/100,'m']];
+  }else if(t==='box'){
+    const b=v.B-3*v.t,h=v.H-3*v.t,lf=b/v.t,lw=h/v.t,lpf=1.12*rt,lrf=1.40*rt,lpw=2.42*rt,lrw=5.70*rt;
+    lim('Flange b/t',lf,lpf,lrf);lim('Web h/t',lw,lpw,lrw);
+    let Mf=Mp,Mw=Mp;
+    if(lf>lpf){if(lf<=lrf)Mf=Math.min(Mp,Mp-(Mp-My)*(3.57*lf*Math.sqrt(Fy/ES)-4.0));
+      else{const be=Math.min(b,1.92*v.t*rt*(1-0.38/lf*rt)),red=b-be,rs=secRects('box',v);rs[0]=[red/2,0,v.B-red,v.t];const pe=rectProps(rs);Mf=Fy*Math.min(pe.Stop,pe.Sbot);notes.push(`Flange slender: ใช้ effective width be = ${fmt(be,2)} cm`);}}
+    if(lw>lpw){if(lw<=lrw)Mw=Math.min(Mp,Mp-(Mp-My)*(0.305*lw*Math.sqrt(Fy/ES)-0.738));else{Mw=My;notes.push('Web slender — เกินขอบเขตโปรแกรม');}}
+    Mn=Math.min(Mp,Mf,Mw);gov=Mn===Mf&&Mf<Mp?'Flange local buckling':Mn===Mw&&Mw<Mp?'Web local buckling':'Yielding (Fy·Zx)';
+    notes.push('เหล็กกล่องไม่คิด LTB (มักไม่ควบคุม) · h, b = ด้าน − 3t ตาม AISC B4.1');
+  }else if(t==='pipe'){
+    const lam=v.D/v.t;lim('D/t',lam,0.07*ES/Fy,0.31*ES/Fy);
+    if(lam<=0.07*ES/Fy){Mn=Mp;gov='Yielding (Fy·Z)';}
+    else if(lam<=0.31*ES/Fy){Mn=(0.021*ES/lam+Fy)*Sx;gov='Local buckling (noncompact)';}
+    else{Mn=0.33*ES/lam*Sx;gov='Local buckling (slender)';if(lam>0.45*ES/Fy)notes.push('D/t เกิน 0.45E/Fy — นอกขอบเขต AISC F8');}
+  }else if(t==='plate'){
+    const Mpl=Math.min(Mp,1.6*My);
+    if(v.o==='edge'){const r=Lb*v.b/(v.t*v.t);
+      if(r<=0.08*ES/Fy){Mn=Mpl;gov='Yielding';}
+      else if(r<=1.9*ES/Fy){Mn=Math.min(Mpl,Cb*(1.52-0.274*r*Fy/ES)*My);gov='Lateral-torsional buckling';}
+      else{Mn=Math.min(Mpl,1.9*ES*Cb/r*Sx);gov='Lateral-torsional buckling';}
+      rows.push({name:'L<sub>b</sub>d/t²',lam:r,lp:0.08*ES/Fy,lr:1.9*ES/Fy,cls:r<=0.08*ES/Fy?'ไม่เกิด LTB':'LTB'});}
+    else{Mn=Mpl;gov='Yielding (min Fy·Z, 1.6Fy·S)';}
+  }else{ // l, t, ch — simplified
+    Mn=My;gov='First yield (Fy·S<sub>min</sub>)';simple=true;
+    notes.push('ตรวจแบบง่าย Mn = Fy·S<sub>min</sub> ไม่รวม LTB และ local buckling — ใช้ได้เมื่อมีค้ำยันด้านข้างพอ ควรตรวจละเอียดตาม '+(t==='ch'?'AISI S100':t==='l'?'AISC F10':'AISC F9'));
+  }
+  const Mu=Math.max(...R.samples.map(s=>Math.abs(s.M))),Vu=Math.max(...R.samples.map(s=>Math.abs(s.V)));
+  const phiM=0.9*Mn/1e5,phiVn=phiV*Vn/1000;
+  if(S.Emode!=='steel')notes.push('E ที่เลือกไม่ใช่เหล็กรูปพรรณ — deflection ยังใช้ค่า E ตามที่เลือก');
+  return {P,Sx,Fy,Lb,Cb,Mp,My,Mn,phiM,Mu,Vn,phiV,phiVn,Vu,gov,shearTxt,rows,notes,simple,rM:Mu/phiM,rV:Vu/phiVn};
+}
+function steelRatio(r,label,dem,cap,u,phiTxt){const ok=r<=1;return `<div class="chk-card"><div class="ck-h"><b>${label}</b><span class="chip ${ok?'pass':'fail'}">${ok?'ผ่าน':'ไม่ผ่าน'}</span></div>
+  <div class="ck-n"><div><span>${dem}</span></div><div><span>${cap}</span></div></div>
+  <div class="bar"><i style="width:${Math.min(100,r*100).toFixed(1)}%" class="${ok?'pass':'fail'}"></i></div><div class="ck-r">Ratio = ${fmt(r,3)} ${phiTxt}</div></div>`;}
+function renderSteel(){
+  const box=$('#steelBox');const show=STEEL.includes(S.Itype)&&R.stable;box.hidden=!show;if(!show)return;
+  const c=steelCheck(),out=$('#steelOut');
+  if(!c||c.err){out.innerHTML=`<div class="empty">${c?c.err:''}</div>`;return;}
+  const sp=c.P,same=Math.abs(sp.Stop-sp.Sbot)<1e-6*sp.Stop;
+  const prop=[['A',sp.A,'cm²'],['I<sub>x</sub>',sp.Ix,'cm⁴'],...(same?[['S<sub>x</sub>',sp.Stop,'cm³']]:[['S<sub>x,top</sub>',sp.Stop,'cm³'],['S<sub>x,bot</sub>',sp.Sbot,'cm³']]),['Z<sub>x</sub>',sp.Z,'cm³'],['r<sub>y</sub>',sp.ry,'cm'],...(sp.extra||[])];
+  out.innerHTML=`<div class="steel-grid">
+    <div class="chk-card"><div class="ck-h"><b>Section properties</b></div><table class="kv">${prop.map(([k,v,u])=>`<tr><td class="t">${k}</td><td>${fmt(v,v>=1000?0:2)}</td><td class="t" style="text-align:left;color:var(--muted)">${u}</td></tr>`).join('')}</table></div>
+    ${steelRatio(c.rV,'Shear','V<sub>u</sub> = '+fmt(c.Vu,3)+' tonf','φ<sub>v</sub>V<sub>n</sub> = '+fmt(c.phiVn,3)+' tonf','tonf',`· φ<sub>v</sub> = ${c.phiV.toFixed(1)}<br><small>${c.shearTxt}</small>`)}
+    ${steelRatio(c.rM,'Moment','M<sub>u</sub> = '+fmt(c.Mu,3)+' tonf·m','φ<sub>b</sub>M<sub>n</sub> = '+fmt(c.phiM,3)+' tonf·m','tonf·m',`· φ<sub>b</sub> = 0.9<br><small>ควบคุมโดย ${c.gov} · M<sub>p</sub> = ${fmt(c.Mp/1e5,3)} t·m</small>`)}
+  </div>
+  ${c.rows.length?`<div class="scroll"><table class="kv"><tr><th>Slenderness</th><th>λ</th><th>λ<sub>p</sub></th><th>λ<sub>r</sub></th><th>ผล</th></tr>${c.rows.map(r=>`<tr><td class="t">${r.name}</td><td>${fmt(r.lam,2)}</td><td>${fmt(r.lp,2)}</td><td>${r.lr==null?'—':fmt(r.lr,2)}</td><td class="t">${r.cls}</td></tr>`).join('')}</table></div>`:''}
+  ${c.notes.length?`<p class="hint">${c.notes.join(' · ')}</p>`:''}`;
+}
+function steelReportHTML(n){
+  if(!STEEL.includes(S.Itype))return '';const c=steelCheck();if(!c||c.err)return '';
+  const sp=c.P,same=Math.abs(sp.Stop-sp.Sbot)<1e-6*sp.Stop,ok=x=>x<=1?'<b class="ok">OK</b>':'<b class="bad">NG</b>';
+  return `<div class="rs"><h3>${n}. ตรวจสอบหน้าตัดเหล็ก — AISC 360-16 LRFD</h3>
+  <div class="two"><div><table><tr><th class="l">Section properties</th><th>ค่า</th><th class="l">หน่วย</th></tr>
+    <tr><td class="t" colspan="3">${esc(S._Idesc)}</td></tr>
+    <tr><td>A</td><td>${fmt(sp.A,2)}</td><td class="t l">cm²</td></tr><tr><td>Ix</td><td>${fmt(sp.Ix,2)}</td><td class="t l">cm⁴</td></tr>
+    ${same?`<tr><td>Sx</td><td>${fmt(sp.Stop,2)}</td><td class="t l">cm³</td></tr>`:`<tr><td>Sx,top</td><td>${fmt(sp.Stop,2)}</td><td class="t l">cm³</td></tr><tr><td>Sx,bot</td><td>${fmt(sp.Sbot,2)}</td><td class="t l">cm³</td></tr>`}
+    <tr><td>Zx</td><td>${fmt(sp.Z,2)}</td><td class="t l">cm³</td></tr><tr><td>ry</td><td>${fmt(sp.ry,2)}</td><td class="t l">cm</td></tr>
+    ${(sp.extra||[]).map(([k,v,u])=>`<tr><td>${k}</td><td>${fmt(v,2)}</td><td class="t l">${u}</td></tr>`).join('')}</table></div>
+  <div><table><tr><th class="l">ข้อมูลออกแบบ</th><th>ค่า</th><th class="l">หน่วย</th></tr>
+    <tr><td class="t">F<sub>y</sub></td><td>${fmtI(c.Fy)}</td><td class="t l">ksc</td></tr><tr><td class="t">E (ตรวจหน้าตัด)</td><td>${fmtI(ES)}</td><td class="t l">ksc</td></tr>
+    <tr><td class="t">L<sub>b</sub></td><td>${fmt(c.Lb/100,2)}</td><td class="t l">m</td></tr><tr><td class="t">C<sub>b</sub></td><td>${fmt(c.Cb,2)}</td><td class="t l"></td></tr></table>
+    ${c.rows.length?`<table style="margin-top:6px"><tr><th class="l">Slenderness</th><th>λ</th><th>λp</th><th>λr</th><th class="l">ผล</th></tr>${c.rows.map(r=>`<tr><td class="t">${r.name}</td><td>${fmt(r.lam,2)}</td><td>${fmt(r.lp,2)}</td><td>${r.lr==null?'—':fmt(r.lr,2)}</td><td class="t l">${r.cls}</td></tr>`).join('')}</table>`:''}</div></div>
+  <table style="margin-top:8px"><tr><th class="l">รายการ</th><th>Demand</th><th>Capacity</th><th>Ratio</th><th class="l">ผล</th></tr>
+    <tr><td class="t">Shear (φ<sub>v</sub> = ${c.phiV.toFixed(1)})</td><td>V<sub>u</sub> = ${fmt(c.Vu,3)} t</td><td>φV<sub>n</sub> = ${fmt(c.phiVn,3)} t</td><td>${fmt(c.rV,3)}</td><td class="t l">${ok(c.rV)}</td></tr>
+    <tr><td class="t">Moment (φ<sub>b</sub> = 0.9)</td><td>M<sub>u</sub> = ${fmt(c.Mu,3)} t·m</td><td>φM<sub>n</sub> = ${fmt(c.phiM,3)} t·m</td><td>${fmt(c.rM,3)}</td><td class="t l">${ok(c.rM)}</td></tr></table>
+  <p style="margin-top:6px">Shear: ${c.shearTxt} · Moment ควบคุมโดย ${c.gov}, M<sub>p</sub> = ${fmt(c.Mp/1e5,3)} t·m</p>
+  ${c.notes.length?`<p style="color:#5a6672">${c.notes.join(' · ')}</p>`:''}</div>`;
+}
+$('#steelBox').addEventListener('input',e=>{const t=e.target;if(['Fy','Lb','Cb'].includes(t.id)){const v=parseFloat(t.value);if(isNaN(v))return;S[t.id]=v;save();renderSteel();}});
+
 const fmt=(v,d=2)=>{if(!isFinite(v))return'—';const s=(Math.abs(v)<0.5*Math.pow(10,-d)?0:v).toFixed(d);return s.replace('-','−');};
 const fmtSci=v=>{if(!isFinite(v)||v===0)return '0';const e=Math.floor(Math.log10(Math.abs(v)));const sup='⁰¹²³⁴⁵⁶⁷⁸⁹';return (v/Math.pow(10,e)).toFixed(3)+' × 10'+String(e).split('').map(c=>c==='-'?'⁻':sup[c]).join('');};
 const fmtI=v=>isFinite(v)?Math.round(v).toLocaleString('en-US'):'—';
@@ -511,7 +675,7 @@ function addItem(k,x,x2){
 }
 $('#preset').addEventListener('change',e=>{if(!e.target.value)return;loadPreset(e.target.value);e.target.value='';syncGlobals();renderTables();update();});
 $('#flip').addEventListener('change',e=>{S.flip=e.target.checked;update();});
-function syncGlobals(){renderEin();renderIin();['L','snap','proj','member','by'].forEach(k=>{$('#'+k).value=S[k]??'';});$('#flip').checked=!!S.flip;}
+function syncGlobals(){if(!(+S.Lb>=0)||S.Lb===undefined)S.Lb=S.L;['Fy','Lb','Cb'].forEach(k=>{$('#'+k).value=S[k];});renderEin();renderIin();['L','snap','proj','member','by'].forEach(k=>{$('#'+k).value=S[k]??'';});$('#flip').checked=!!S.flip;}
 
 /* drawing helpers — markup builders shared by the live page and the PDF */
 const PL=58,PR=26;
@@ -642,7 +806,7 @@ const fac=o=>{const f=parseFloat(o.f);return isFinite(f)?f:1;};
 const fstr=o=>Math.abs(fac(o)-1)>1e-12?` ×${+fac(o).toFixed(3)}`:'';
 function factored(){return {...S,points:S.points.map(p=>({...p,P:(+p.P||0)*fac(p)})),moments:S.moments.map(m=>({...m,M:(+m.M||0)*fac(m)})),
   dists:S.dists.map(d=>({...d,w1:(+d.w1||0)*fac(d),w2:(+d.w2||0)*fac(d)}))};}
-function update(){computeEI();R=solveBeam(factored());const Rs=solveBeam(S);R.svc=Rs;if(R.stable&&Rs.stable)R.defl=Rs.defl;save();renderSchematic();renderDiagrams();renderResults();drawHover();}
+function update(){computeEI();R=solveBeam(factored());const Rs=solveBeam(S);R.svc=Rs;if(R.stable&&Rs.stable)R.defl=Rs.defl;save();renderSchematic();renderDiagrams();renderResults();renderSteel();drawHover();}
 
 /* hover crosshair */
 function drawHover(){
@@ -727,8 +891,9 @@ async function buildReport(){
     <p style="margin-top:6px">ตรวจสมดุล (factored): ΣR<sub>y</sub> = ${fmt(R.sumR,3)} tonf, Σ น้ำหนัก = ${fmt(R.sumLoad,3)} tonf (ΣP = ${fmt(R.sumLoad-R.W,3)}, Σw = ${fmt(R.W,3)}) · ΣM รอบ x = 0 = ${fmt(R.sumM0,4)} tonf·m <b class="${ok?'ok':'bad'}">${ok?'สมดุล OK':'ไม่สมดุล'}</b></p></div>
   <div class="rs"><h3>4. Shear force diagram, V<sub>u</sub> (tonf) — factored load</h3><img src="${imgs.sv}" alt=""></div>
   <div class="rs"><h3>5. Bending moment diagram, M<sub>u</sub> (tonf·m) — factored load</h3><img src="${imgs.sm}" alt=""><div class="cap">${S.flip?'วาดด้านรับแรงดึง (tension side): โมเมนต์บวกอยู่ใต้แกน':'โมเมนต์บวก (sagging) อยู่เหนือแกน'}</div></div>
-  <div class="rs"><h3>6. Deflection, δ (cm) — service load</h3><img src="${imgs.sd}" alt=""></div>
-  <div class="rs"><h3>7. สรุปค่าสูงสุด</h3>
+  ${steelReportHTML(6)}
+  <div class="rs"><h3>${STEEL.includes(S.Itype)?7:6}. Deflection, δ (cm) — service load</h3><img src="${imgs.sd}" alt=""></div>
+  <div class="rs"><h3>${STEEL.includes(S.Itype)?8:7}. สรุปค่าสูงสุด</h3>
     <table><tr><th class="l">รายการ</th><th>ค่า</th><th class="l">หน่วย</th><th>ที่ x (m)</th></tr>
       <tr><td class="t">V<sub>max</sub> (+)</td><td>${fmt(e.vM.V,3)}</td><td class="t l">tonf</td><td>${fmt(e.vM.x)}</td></tr>
       <tr><td class="t">V<sub>min</sub> (−)</td><td>${fmt(e.vm.V,3)}</td><td class="t l">tonf</td><td>${fmt(e.vm.x)}</td></tr>
