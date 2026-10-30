@@ -46,6 +46,13 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid 
 .btn:disabled{opacity:.6;cursor:progress}
 .btn svg{width:16px;height:16px}
 .status{font-size:12px;color:var(--muted);min-height:1em}
+.prow{display:flex;gap:6px;align-items:center;min-width:0}
+.prow input,.prow select{flex:1;min-width:0}
+.sbtn{font:inherit;font-size:12.5px;font-weight:500;padding:6px 10px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);cursor:pointer;white-space:nowrap}
+.sbtn.ghost{background:none;color:var(--accent);border-color:var(--line)}
+.sbtn:disabled{opacity:.45;cursor:default}
+.prow .sbtn.ghost:only-of-type{flex:none}
+.prow #pExport,.prow #pImport{flex:1}
 .prop{display:flex;flex-direction:column;gap:8px;padding-top:10px;border-top:1px solid var(--line)}
 .prop select{width:100%}
 .secrow{display:grid;grid-template-columns:minmax(0,1fr) 112px;gap:10px;align-items:start}
@@ -184,6 +191,13 @@ main{display:flex;flex-direction:column;gap:12px;min-width:0}
 
   <div class="app">
     <aside class="rail">
+      <section class="box">
+        <h2>งานที่บันทึกไว้ <button class="add" id="pNew">เริ่มงานใหม่</button></h2>
+        <div class="prow"><input class="txt" id="pName" type="text" placeholder="ชื่องาน" aria-label="ชื่องาน"><button class="sbtn" id="pSave">บันทึก</button></div>
+        <div class="prow"><select id="pList" aria-label="งานที่บันทึกไว้"></select><button class="sbtn" id="pOpen">เปิด</button><button class="sbtn ghost" id="pDel">ลบ</button></div>
+        <div class="prow"><button class="sbtn ghost" id="pExport">บันทึกเป็นไฟล์</button><button class="sbtn ghost" id="pImport">เปิดไฟล์</button><input type="file" id="pFile" accept=".json,application/json" hidden></div>
+        <p class="hint" id="pMsg">งานในรายการเก็บไว้ในเบราว์เซอร์นี้ · ไฟล์ .beam.json เปิดได้ทุกเครื่อง</p>
+      </section>
       <section class="box">
         <h2>ข้อมูลรายการคำนวณ</h2>
         <div class="grid2">
@@ -413,7 +427,8 @@ function loadPreset(k){const p=PRESETS[k];S.L=p.L;
   S.supports=p.s.map(([x,type])=>({id:nid(),x,type}));S.points=p.p.map(([x,P])=>({id:nid(),x,P,f:1}));
   S.dists=p.d.map(([a,b,w1,w2])=>({id:nid(),a,b,w1,w2,f:1}));S.moments=p.m.map(([x,M])=>({id:nid(),x,M,f:1}));}
 const SKEY='beamVM_tonf_v1';
-try{const sv=JSON.parse(localStorage.getItem(SKEY)||'null');if(sv&&sv.supports){S=Object.assign(S,sv);
+const DEF=JSON.parse(JSON.stringify(S));
+function adopt(sv){S=Object.assign(JSON.parse(JSON.stringify(DEF)),JSON.parse(JSON.stringify(sv)));S.sec=S.sec||{};
   uid=1+Math.max(0,...['supports','points','dists','moments'].flatMap(k=>S[k].map(o=>o.id)));
   ['points','dists','moments'].forEach(k=>S[k].forEach(o=>{if(!isFinite(parseFloat(o.f)))o.f=1;}));
   if(!sv.Emode){S.Emode='manual';S.Eman=sv.E;S.Itype='manual';S.Iman=sv.I;}
@@ -421,7 +436,8 @@ try{const sv=JSON.parse(localStorage.getItem(SKEY)||'null');if(sv&&sv.supports){
   if(!S.cSwap2){const c=S.sec.c,h=S.sec.ch;S.sec.c=undefined;S.sec.ch=undefined;
     if(h&&('tw' in h))S.sec.c=h;if(c&&('C' in c))S.sec.ch=c;if(c&&('tw' in c))S.sec.c=c;
     if(S.Itype==='c'&&c&&('C' in c))S.Itype='ch';else if(S.Itype==='ch'&&h&&('tw' in h))S.Itype='c';S.cSwap2=true;}
-  S.secUnit='cm';}else loadPreset('cont2');}catch(e){loadPreset('cont2');}
+  S.secUnit='cm';}
+try{const sv=JSON.parse(localStorage.getItem(SKEY)||'null');if(sv&&sv.supports)adopt(sv);else loadPreset('cont2');}catch(e){loadPreset('cont2');}
 const save=()=>{try{localStorage.setItem(SKEY,JSON.stringify(S));}catch(e){}};
 
 /* ---------- E and I ---------- */
@@ -1075,7 +1091,50 @@ async function exportPDF(){
 }
 $('#pdfBtn').addEventListener('click',exportPDF);
 
-syncGlobals();renderTools();renderTables();update();
+/* ---------- Save / open jobs ---------- */
+const PKEY='beamVM_projects_v1';
+const snapshot=()=>{const d=JSON.parse(JSON.stringify(S));Object.keys(d).forEach(k=>{if(k[0]==='_')delete d[k];});delete d.tool;return d;};
+const readProjects=()=>{try{return JSON.parse(localStorage.getItem(PKEY)||'{}')||{};}catch(e){return {};}};
+const writeProjects=o=>{try{localStorage.setItem(PKEY,JSON.stringify(o));return true;}catch(e){return false;}};
+const jobName=()=>[S.proj,S.member].filter(Boolean).join(' – ')||'งานไม่มีชื่อ';
+let delArm=null,newArm=false;
+function pmsg(t){$('#pMsg').textContent=t;}
+function renderJobs(){const P=readProjects(),names=Object.keys(P).sort((a,b)=>(P[b].savedAt||'').localeCompare(P[a].savedAt||''));
+  const sel=$('#pList'),cur=sel.value;
+  sel.innerHTML=names.length?names.map(n=>`<option value="${esc(n)}">${esc(n)} · ${new Date(P[n].savedAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'})}</option>`).join(''):'<option value="">— ยังไม่มีงานที่บันทึก —</option>';
+  if(names.includes(cur))sel.value=cur;
+  $('#pOpen').disabled=$('#pDel').disabled=!names.length;
+  if(document.activeElement!==$('#pName')&&!$('#pName').value)$('#pName').value=jobName();
+  $('#pDel').textContent=delArm&&delArm===sel.value?'ยืนยันลบ':'ลบ';}
+function loadJob(data,label){adopt(data);syncGlobals();renderTools();renderTables();update();renderJobs();$('#pName').value=label||jobName();}
+$('#pSave').addEventListener('click',()=>{const n=($('#pName').value||'').trim()||jobName();const P=readProjects();const over=!!P[n];
+  P[n]={savedAt:new Date().toISOString(),data:snapshot()};
+  pmsg(writeProjects(P)?`${over?'บันทึกทับ':'บันทึก'} "${n}" แล้ว`:'บันทึกไม่ได้ — เบราว์เซอร์นี้ไม่อนุญาตให้เก็บข้อมูล ใช้ "บันทึกเป็นไฟล์" แทน');
+  $('#pName').value=n;renderJobs();$('#pList').value=n;});
+$('#pOpen').addEventListener('click',()=>{const n=$('#pList').value,P=readProjects();if(!P[n])return;loadJob(P[n].data,n);pmsg(`เปิด "${n}" แล้ว`);});
+$('#pDel').addEventListener('click',()=>{const n=$('#pList').value;if(!n)return;
+  if(delArm!==n){delArm=n;renderJobs();pmsg('กด "ยืนยันลบ" อีกครั้งเพื่อลบ');setTimeout(()=>{if(delArm===n){delArm=null;renderJobs();}},4000);return;}
+  const P=readProjects();delete P[n];writeProjects(P);delArm=null;renderJobs();pmsg(`ลบ "${n}" แล้ว`);});
+$('#pList').addEventListener('change',()=>{delArm=null;renderJobs();});
+$('#pNew').addEventListener('click',()=>{
+  if(!newArm){newArm=true;$('#pNew').textContent='ยืนยันเริ่มใหม่';pmsg('ค่าที่ยังไม่บันทึกจะหาย กดอีกครั้งเพื่อยืนยัน');setTimeout(()=>{newArm=false;$('#pNew').textContent='เริ่มงานใหม่';},4000);return;}
+  newArm=false;$('#pNew').textContent='เริ่มงานใหม่';const keep={Emode:S.Emode,fc:S.fc,Itype:S.Itype,sec:S.sec};
+  S=JSON.parse(JSON.stringify(DEF));Object.assign(S,keep);loadPreset('simple');S.Lb=S.L;syncGlobals();renderTools();renderTables();update();$('#pName').value='';renderJobs();pmsg('เริ่มงานใหม่แล้ว');});
+$('#pExport').addEventListener('click',async()=>{
+  const name=(($('#pName').value||'').trim()||jobName()).replace(/[\\/:*?"<>|]+/g,'-');
+  const blob=new Blob([JSON.stringify({app:'beam-vm',version:1,savedAt:new Date().toISOString(),name,data:snapshot()},null,1)],{type:'application/json'});
+  const fname=`${name}.beam.json`;await getDl();
+  try{if(dlNS){await dlNS.save({filename:fname,data:blob});pmsg(`บันทึกไฟล์ ${fname} แล้ว`);}
+    else{const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=fname;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);pmsg(`ดาวน์โหลด ${fname} แล้ว`);}}
+  catch(err){pmsg(err&&err.code==='declined'?'ยกเลิกการบันทึกไฟล์':'บันทึกไฟล์ไม่ได้ ('+(err&&err.code||err)+')');}});
+$('#pImport').addEventListener('click',()=>$('#pFile').click());
+$('#pFile').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();
+  rd.onload=()=>{try{const j=JSON.parse(rd.result);const d=j&&j.app==='beam-vm'?j.data:j;if(!d||!Array.isArray(d.supports))throw 0;
+      loadJob(d,j.name||f.name.replace(/\.beam\.json$|\.json$/i,''));pmsg(`เปิดไฟล์ ${f.name} แล้ว`);}
+    catch(err){pmsg('ไฟล์นี้ไม่ใช่ไฟล์งานของโปรแกรมนี้');}e.target.value='';};
+  rd.readAsText(f);});
+
+syncGlobals();renderTools();renderTables();update();renderJobs();
 </script>
 
 </body>
