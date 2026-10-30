@@ -195,8 +195,8 @@ main{display:flex;flex-direction:column;gap:12px;min-width:0}
         <h2>งานที่บันทึกไว้ <button class="add" id="pNew">เริ่มงานใหม่</button></h2>
         <div class="prow"><input class="txt" id="pName" type="text" placeholder="ชื่องาน" aria-label="ชื่องาน"><button class="sbtn" id="pSave">บันทึก</button></div>
         <div class="prow"><select id="pList" aria-label="งานที่บันทึกไว้"></select><button class="sbtn" id="pOpen">เปิด</button><button class="sbtn ghost" id="pDel">ลบ</button></div>
-        <div class="prow"><button class="sbtn ghost" id="pExport">บันทึกเป็นไฟล์</button><button class="sbtn ghost" id="pImport">เปิดไฟล์</button><input type="file" id="pFile" accept=".json,application/json" hidden></div>
-        <p class="hint" id="pMsg">งานในรายการเก็บไว้ในเบราว์เซอร์นี้ · ไฟล์ .beam.json เปิดได้ทุกเครื่อง</p>
+        <div class="prow"><button class="sbtn ghost" id="pExport">บันทึกเป็นไฟล์</button><button class="sbtn ghost" id="pImport">เปิดไฟล์</button><input type="file" id="pFile" accept=".html,.htm,.json,text/html,application/json" hidden></div>
+        <p class="hint" id="pMsg">งานในรายการเก็บไว้ในเบราว์เซอร์นี้ · ไฟล์ .beam.html ดับเบิลคลิกเปิดได้ทุกเครื่อง</p>
       </section>
       <section class="box">
         <h2>ข้อมูลรายการคำนวณ</h2>
@@ -1092,6 +1092,15 @@ async function exportPDF(){
 $('#pdfBtn').addEventListener('click',exportPDF);
 
 /* ---------- Save / open jobs ---------- */
+const SITE='https://wittaern.github.io/Beam-calculator/';
+const b64e=str=>{const by=new TextEncoder().encode(str);let bin='';for(let i=0;i<by.length;i+=8192)bin+=String.fromCharCode.apply(null,by.subarray(i,i+8192));return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');};
+const b64d=t=>{t=t.replace(/-/g,'+').replace(/_/g,'/');while(t.length%4)t+='=';const bin=atob(t),by=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)by[i]=bin.charCodeAt(i);return new TextDecoder().decode(by);};
+function jobHTML(job){const url=SITE+'#job='+b64e(JSON.stringify(job)),e=x=>String(x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  return `<!doctype html>\n<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">\n<title>${e(job.name)} — Beam calculator</title>\n<meta http-equiv="refresh" content="0;url=${e(url)}">\n<script>location.replace(${JSON.stringify(url)});<\/script>\n</head><body style="font-family:sans-serif;padding:24px">\n<p>กำลังเปิดงาน “${e(job.name)}” ใน Beam calculator…</p><p><a href="${e(url)}">คลิกที่นี่ถ้าหน้าไม่เปิดเอง</a></p>\n<script type="application/json" id="beam-job">${JSON.stringify(job).replace(/</g,'\\u003c')}<\/script>\n</body></html>\n`;}
+function jobFromText(txt){
+  const m=txt.match(/<script type="application\/json" id="beam-job">([\s\S]*?)<\/script>/);if(m)return JSON.parse(m[1]);
+  const h=txt.match(/#job=([A-Za-z0-9_-]+)/);if(h)return JSON.parse(b64d(h[1]));
+  return JSON.parse(txt);}
 const PKEY='beamVM_projects_v1';
 const snapshot=()=>{const d=JSON.parse(JSON.stringify(S));Object.keys(d).forEach(k=>{if(k[0]==='_')delete d[k];});delete d.tool;return d;};
 const readProjects=()=>{try{return JSON.parse(localStorage.getItem(PKEY)||'{}')||{};}catch(e){return {};}};
@@ -1122,19 +1131,23 @@ $('#pNew').addEventListener('click',()=>{
   S=JSON.parse(JSON.stringify(DEF));Object.assign(S,keep);loadPreset('simple');S.Lb=S.L;syncGlobals();renderTools();renderTables();update();$('#pName').value='';renderJobs();pmsg('เริ่มงานใหม่แล้ว');});
 $('#pExport').addEventListener('click',async()=>{
   const name=(($('#pName').value||'').trim()||jobName()).replace(/[\\/:*?"<>|]+/g,'-');
-  const blob=new Blob([JSON.stringify({app:'beam-vm',version:1,savedAt:new Date().toISOString(),name,data:snapshot()},null,1)],{type:'application/json'});
-  const fname=`${name}.beam.json`;await getDl();
+  const job={app:'beam-vm',version:1,savedAt:new Date().toISOString(),name,data:snapshot()};
+  const blob=new Blob([jobHTML(job)],{type:'text/html'});
+  const fname=`${name}.beam.html`;await getDl();
   try{if(dlNS){await dlNS.save({filename:fname,data:blob});pmsg(`บันทึกไฟล์ ${fname} แล้ว`);}
     else{const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=fname;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);pmsg(`ดาวน์โหลด ${fname} แล้ว`);}}
   catch(err){pmsg(err&&err.code==='declined'?'ยกเลิกการบันทึกไฟล์':'บันทึกไฟล์ไม่ได้ ('+(err&&err.code||err)+')');}});
 $('#pImport').addEventListener('click',()=>$('#pFile').click());
 $('#pFile').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();
-  rd.onload=()=>{try{const j=JSON.parse(rd.result);const d=j&&j.app==='beam-vm'?j.data:j;if(!d||!Array.isArray(d.supports))throw 0;
-      loadJob(d,j.name||f.name.replace(/\.beam\.json$|\.json$/i,''));pmsg(`เปิดไฟล์ ${f.name} แล้ว`);}
+  rd.onload=()=>{try{const j=jobFromText(String(rd.result));const d=j&&j.app==='beam-vm'?j.data:j;if(!d||!Array.isArray(d.supports))throw 0;
+      loadJob(d,j.name||f.name.replace(/\.beam\.(json|html?)$|\.(json|html?)$/i,''));pmsg(`เปิดไฟล์ ${f.name} แล้ว`);}
     catch(err){pmsg('ไฟล์นี้ไม่ใช่ไฟล์งานของโปรแกรมนี้');}e.target.value='';};
   rd.readAsText(f);});
 
+let hashJob=null;try{const hm=location.hash.match(/^#job=([A-Za-z0-9_-]+)/);if(hm){const j=JSON.parse(b64d(hm[1]));if(j&&j.data&&Array.isArray(j.data.supports)){adopt(j.data);hashJob=j.name||'';}
+  history.replaceState(null,'',location.pathname+location.search);}}catch(e){}
 syncGlobals();renderTools();renderTables();update();renderJobs();
+if(hashJob!==null){$('#pName').value=hashJob||jobName();pmsg(`เปิดงาน "${hashJob||jobName()}" จากไฟล์แล้ว`);}
 </script>
 
 </body>
