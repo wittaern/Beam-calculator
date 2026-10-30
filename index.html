@@ -55,7 +55,9 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid 
 .calc span{color:var(--muted);font-family:var(--f-body);font-size:12px}
 .calc.err{color:var(--warn)}
 #steelBox h2 .tag{font-weight:600;color:var(--ink);text-transform:none;letter-spacing:0;font-size:12px}
-.steel-in{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;max-width:460px;align-items:end}
+.steel-in{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;max-width:600px;align-items:end}
+@media (max-width:520px){.steel-in{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.steel-in input[readonly]{background:var(--soft);color:var(--muted)}
 .steel-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
 .chk-card{border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;min-width:0}
 .ck-h{display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -234,11 +236,12 @@ main{display:flex;flex-direction:column;gap:12px;min-width:0}
       <section class="box" id="steelBox" hidden>
         <h2>ตรวจสอบหน้าตัดเหล็ก — AISC 360-16 LRFD <span class="tag">factored load</span></h2>
         <div class="steel-in">
+          <label class="f"><span>เกรดเหล็ก</span><select id="grade"></select></label>
           <label class="f"><span>F<sub>y</sub> (ksc)</span><input class="num" id="Fy" type="number" step="50" min="0"></label>
           <label class="f"><span>L<sub>b</sub></span><input class="num" id="Lb" type="number" step="0.1" min="0"></label>
           <label class="f"><span>C<sub>b</sub></span><input class="num" id="Cb" type="number" step="0.05" min="1"></label>
         </div>
-        <p class="hint">L<sub>b</sub> = ระยะค้ำยันด้านข้าง (m) · SS400 ≈ 2,500 ksc (245 MPa) · SM520 ≈ 3,600 ksc (355 MPa) · A36 ≈ 2,530 ksc · C<sub>b</sub> = 1.0 conservative</p>
+        <p class="hint">L<sub>b</sub> = ระยะค้ำยันด้านข้าง (m) · C<sub>b</sub> = 1.0 conservative · เลือก "กรอกค่าเอง" เพื่อใส่ F<sub>y</sub> อื่น</p>
         <div id="steelOut"></div>
       </section>
       <div class="plot"><div class="cap"><strong>Deflection, δ (cm)</strong><span class="rt"><span id="eiCap"></span><span class="tag">service load</span></span></div><svg id="sd"></svg></div>
@@ -387,7 +390,7 @@ const PRESETS={
   overhang:{L:8,s:[[0,'pin'],[6,'roller']],p:[[8,2]],d:[[0,6,1,1]],m:[[3,1.5]]},
   fixed:{L:6,s:[[0,'fixed'],[6,'fixed']],p:[[2,4]],d:[],m:[]}
 };
-let S={Fy:2500,Cb:1,secUnit:'cm',cSwap2:true,L:10,E:233928,I:260417,Emode:'concrete',fc:240,Eman:233928,Itype:'rect',Iman:260417,sec:{},snap:0.05,flip:false,tool:'pin',proj:'',member:'',by:'',supports:[],points:[],dists:[],moments:[]};
+let S={Fy:2350,grade:'SM400',FyMan:2350,Cb:1,secUnit:'cm',cSwap2:true,L:10,E:233928,I:260417,Emode:'concrete',fc:240,Eman:233928,Itype:'rect',Iman:260417,sec:{},snap:0.05,flip:false,tool:'pin',proj:'',member:'',by:'',supports:[],points:[],dists:[],moments:[]};
 function loadPreset(k){const p=PRESETS[k];S.L=p.L;
   S.supports=p.s.map(([x,type])=>({id:nid(),x,type}));S.points=p.p.map(([x,P])=>({id:nid(),x,P,f:1}));
   S.dists=p.d.map(([a,b,w1,w2])=>({id:nid(),a,b,w1,w2,f:1}));S.moments=p.m.map(([x,M])=>({id:nid(),x,M,f:1}));}
@@ -583,7 +586,15 @@ function steelCheck(){
 function steelRatio(r,label,dem,cap,u,phiTxt){const ok=r<=1;return `<div class="chk-card"><div class="ck-h"><b>${label}</b><span class="chip ${ok?'pass':'fail'}">${ok?'ผ่าน':'ไม่ผ่าน'}</span></div>
   <div class="ck-n"><div><span>${dem}</span></div><div><span>${cap}</span></div></div>
   <div class="bar"><i style="width:${Math.min(100,r*100).toFixed(1)}%" class="${ok?'pass':'fail'}"></i></div><div class="ck-r">Ratio = ${fmt(r,3)} ${phiTxt}</div></div>`;}
-function renderSteel(){
+const GRADES={hot:[['SM400',2350],['SM520',3550]],box:[['STKR400',2450],['STKR490',3250]],
+  pipe:[['STK400',2350],['STK490',3150],['STK500',3550],['STK540',3900]],cf:[['SSCS330',2050],['SSCS400',2450],['SSCS490',2850],['SSCS540',4000]]};
+const gradeGroup=t=>t==='box'?'box':t==='pipe'?'pipe':t==='ch'?'cf':'hot';
+function syncGrade(){if(!STEEL.includes(S.Itype))return;const g=GRADES[gradeGroup(S.Itype)];
+  if(S.grade!=='custom'&&!g.some(x=>x[0]===S.grade))S.grade=g[0][0];
+  const cur=g.find(x=>x[0]===S.grade);S.Fy=cur?cur[1]:+S.FyMan;
+  const sel=$('#grade');sel.innerHTML=g.map(([n,f])=>`<option value="${n}">${n}</option>`).join('')+'<option value="custom">กรอกค่าเอง</option>';sel.value=S.grade;
+  const fy=$('#Fy');fy.readOnly=S.grade!=='custom';if(document.activeElement!==fy)fy.value=S.Fy;}
+function renderSteel(){syncGrade();
   const box=$('#steelBox');const show=STEEL.includes(S.Itype)&&R.stable;box.hidden=!show;if(!show)return;
   const c=steelCheck(),out=$('#steelOut');
   if(!c||c.err){out.innerHTML=`<div class="empty">${c?c.err:''}</div>`;return;}
@@ -608,7 +619,7 @@ function steelReportHTML(n){
     <tr><td>Zx</td><td>${fmt(sp.Z,2)}</td><td class="t l">cm³</td></tr><tr><td>ry</td><td>${fmt(sp.ry,2)}</td><td class="t l">cm</td></tr>
     ${(sp.extra||[]).map(([k,v,u])=>`<tr><td>${k}</td><td>${fmt(v,2)}</td><td class="t l">${u}</td></tr>`).join('')}</table></div>
   <div><table><tr><th class="l">ข้อมูลออกแบบ</th><th>ค่า</th><th class="l">หน่วย</th></tr>
-    <tr><td class="t">F<sub>y</sub></td><td>${fmtI(c.Fy)}</td><td class="t l">ksc</td></tr><tr><td class="t">E (ตรวจหน้าตัด)</td><td>${fmtI(ES)}</td><td class="t l">ksc</td></tr>
+    <tr><td class="t">F<sub>y</sub> (${S.grade==="custom"?"กรอกค่าเอง":S.grade})</td><td>${fmtI(c.Fy)}</td><td class="t l">ksc</td></tr><tr><td class="t">E (ตรวจหน้าตัด)</td><td>${fmtI(ES)}</td><td class="t l">ksc</td></tr>
     <tr><td class="t">L<sub>b</sub></td><td>${fmt(c.Lb/100,2)}</td><td class="t l">m</td></tr><tr><td class="t">C<sub>b</sub></td><td>${fmt(c.Cb,2)}</td><td class="t l"></td></tr></table>
     ${c.rows.length?`<table style="margin-top:6px"><tr><th class="l">Slenderness</th><th>λ</th><th>λp</th><th>λr</th><th class="l">ผล</th></tr>${c.rows.map(r=>`<tr><td class="t">${r.name}</td><td>${fmt(r.lam,2)}</td><td>${fmt(r.lp,2)}</td><td>${r.lr==null?'—':fmt(r.lr,2)}</td><td class="t l">${r.cls}</td></tr>`).join('')}</table>`:''}</div></div>
   <table style="margin-top:8px"><tr><th class="l">รายการ</th><th>Demand</th><th>Capacity</th><th>Ratio</th><th class="l">ผล</th></tr>
@@ -617,7 +628,9 @@ function steelReportHTML(n){
   <p style="margin-top:6px">Shear: ${c.shearTxt} · Moment ควบคุมโดย ${c.gov}, M<sub>p</sub> = ${fmt(c.Mp/1e5,3)} t·m</p>
   ${c.notes.length?`<p style="color:#5a6672">${c.notes.join(' · ')}</p>`:''}</div>`;
 }
-$('#steelBox').addEventListener('input',e=>{const t=e.target;if(['Fy','Lb','Cb'].includes(t.id)){const v=parseFloat(t.value);if(isNaN(v))return;S[t.id]=v;save();renderSteel();}});
+$('#steelBox').addEventListener('input',e=>{const t=e.target;if(t.id==='grade'){S.grade=t.value;save();renderSteel();return;}
+  if(t.id==='Fy'){if(S.grade!=='custom')return;const v=parseFloat(t.value);if(isNaN(v))return;S.FyMan=v;save();renderSteel();return;}
+  if(['Lb','Cb'].includes(t.id)){const v=parseFloat(t.value);if(isNaN(v))return;S[t.id]=v;save();renderSteel();}});
 
 const fmt=(v,d=2)=>{if(!isFinite(v))return'—';const s=(Math.abs(v)<0.5*Math.pow(10,-d)?0:v).toFixed(d);return s.replace('-','−');};
 const fmtSci=v=>{if(!isFinite(v)||v===0)return '0';const e=Math.floor(Math.log10(Math.abs(v)));const sup='⁰¹²³⁴⁵⁶⁷⁸⁹';return (v/Math.pow(10,e)).toFixed(3)+' × 10'+String(e).split('').map(c=>c==='-'?'⁻':sup[c]).join('');};
@@ -675,7 +688,7 @@ function addItem(k,x,x2){
 }
 $('#preset').addEventListener('change',e=>{if(!e.target.value)return;loadPreset(e.target.value);e.target.value='';syncGlobals();renderTables();update();});
 $('#flip').addEventListener('change',e=>{S.flip=e.target.checked;update();});
-function syncGlobals(){if(!(+S.Lb>=0)||S.Lb===undefined)S.Lb=S.L;['Fy','Lb','Cb'].forEach(k=>{$('#'+k).value=S[k];});renderEin();renderIin();['L','snap','proj','member','by'].forEach(k=>{$('#'+k).value=S[k]??'';});$('#flip').checked=!!S.flip;}
+function syncGlobals(){if(!(+S.Lb>=0)||S.Lb===undefined)S.Lb=S.L;['Lb','Cb'].forEach(k=>{$('#'+k).value=S[k];});renderEin();renderIin();['L','snap','proj','member','by'].forEach(k=>{$('#'+k).value=S[k]??'';});$('#flip').checked=!!S.flip;}
 
 /* drawing helpers — markup builders shared by the live page and the PDF */
 const PL=58,PR=26;
