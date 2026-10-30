@@ -186,8 +186,8 @@ main{display:flex;flex-direction:column;gap:12px;min-width:0}
           <label class="f">Moment of inertia, I (แกนหลัก, รับแรงแนวดิ่ง)
             <select id="Itype">
               <option value="rect">หน้าตัดสี่เหลี่ยมผืนผ้า</option><option value="box">เหล็กกล่อง</option><option value="pipe">เหล็กท่อ</option>
-              <option value="wf">เหล็ก WF (H-beam)</option><option value="c">เหล็กตัว C</option><option value="l">เหล็กตัว L</option>
-              <option value="t">เหล็กตัว T</option><option value="plate">เหล็กเพลท</option><option value="manual">กรอกค่า I เอง</option>
+              <option value="wf">เหล็ก WF (H-beam)</option><option value="c">เหล็กตัว C (ขอบพับ)</option><option value="l">เหล็กตัว L</option>
+              <option value="t">เหล็กตัว T</option><option value="plate">เหล็กเพลท</option><option value="ch">เหล็ก Channel (รีดร้อน)</option><option value="manual">กรอกค่า I เอง</option>
             </select></label>
           <div class="secrow" id="secrow"><div id="Iin" class="grid2"></div><svg id="secsk" viewBox="0 0 112 96" aria-hidden="true"></svg></div>
           <div class="calc" id="Iout"></div>
@@ -371,6 +371,7 @@ try{const sv=JSON.parse(localStorage.getItem(SKEY)||'null');if(sv&&sv.supports){
   ['points','dists','moments'].forEach(k=>S[k].forEach(o=>{if(!isFinite(parseFloat(o.f)))o.f=1;}));
   if(!sv.Emode){S.Emode='manual';S.Eman=sv.E;S.Itype='manual';S.Iman=sv.I;}
   if(S.secUnit!=='cm'){for(const k in S.sec){if(k==='rect')continue;for(const q in S.sec[k])if(typeof S.sec[k][q]==='number')S.sec[k][q]=+(S.sec[k][q]/10).toFixed(4);}}
+  if(S.sec.c&&('tw' in S.sec.c)){S.sec.ch=S.sec.c;delete S.sec.c;if(S.Itype==='c')S.Itype='ch';}
   S.secUnit='cm';}else loadPreset('cont2');}catch(e){loadPreset('cont2');}
 const save=()=>{try{localStorage.setItem(SKEY,JSON.stringify(S));}catch(e){}};
 
@@ -390,10 +391,11 @@ const SECS={
     ok:v=>v.H>2*v.tf&&v.B>v.tw, I:v=>(v.B*v.H**3-(v.B-v.tw)*(v.H-2*v.tf)**3)/12, A:v=>2*v.B*v.tf+(v.H-2*v.tf)*v.tw,
     desc:v=>`WF ${v.H} × ${v.B} × ${v.tw} × ${v.tf} cm`,
     shape:v=>{const {H,B,tw,tf}=v,a=(B-tw)/2;return {w:B,h:H,ybar:H/2,d:P0([[0,0],[B,0],[B,tf],[a+tw,tf],[a+tw,H-tf],[B,H-tf],[B,H],[0,H],[0,H-tf],[a,H-tf],[a,tf],[0,tf]])};}},
-  c:{u:'cm',p:[['H','ลึก H'],['B','กว้างปีก B'],['tw','หนาเอว tw'],['tf','หนาปีก tf']],d:{H:15,B:7.5,tw:0.65,tf:1},
-    ok:v=>v.H>2*v.tf&&v.B>v.tw, I:v=>(v.B*v.H**3-(v.B-v.tw)*(v.H-2*v.tf)**3)/12, A:v=>2*v.B*v.tf+(v.H-2*v.tf)*v.tw,
-    desc:v=>`เหล็กตัว C ${v.H} × ${v.B} × ${v.tw} × ${v.tf} cm`,
-    shape:v=>{const {H,B,tw,tf}=v;return {w:B,h:H,ybar:H/2,d:P0([[0,0],[B,0],[B,tf],[tw,tf],[tw,H-tf],[B,H-tf],[B,H],[0,H]])};}},
+  c:{u:'cm',p:[['H','ลึก H'],['B','กว้างปีก B'],['C','ขอบพับ C'],['t','หนา t']],d:{H:10,B:5,C:2,t:0.23},
+    ok:v=>v.C>v.t&&v.B>2*v.t&&v.H>=2*v.C,
+    I:v=>{const {H,B,C,t}=v,yf=H/2-t/2,yl=H/2-(C+t)/2;return t*H**3/12+2*((B-t)*t**3/12+(B-t)*t*yf**2)+2*(t*(C-t)**3/12+t*(C-t)*yl**2);},
+    A:v=>v.t*v.H+2*(v.B-v.t)*v.t+2*v.t*(v.C-v.t), desc:v=>`เหล็กตัว C (ขอบพับ) ${v.H} × ${v.B} × ${v.C} × ${v.t} cm`,
+    shape:v=>{const {H,B,C,t}=v;return {w:B,h:H,ybar:H/2,d:P0([[0,0],[B,0],[B,C],[B-t,C],[B-t,t],[t,t],[t,H-t],[B-t,H-t],[B-t,H-C],[B,H-C],[B,H],[0,H]])};}},
   l:{u:'cm',p:[['A','ขาตั้ง A'],['B','ขานอน B'],['t','หนา t']],d:{A:10,B:10,t:1},
     ok:v=>v.A>v.t&&v.B>v.t,
     I:v=>{const {A,B,t}=v,a1=t*A,a2=(B-t)*t,yb=(a1*A/2+a2*t/2)/(a1+a2);return t*A**3/12+a1*(A/2-yb)**2+(B-t)*t**3/12+a2*(t/2-yb)**2;},
@@ -408,7 +410,11 @@ const SECS={
   plate:{u:'cm',p:[['b','กว้าง b'],['t','หนา t'],['o','การวาง']],d:{b:20,t:1.2,o:'flat'},
     ok:v=>true, I:v=>v.o==='edge'?v.t*v.b**3/12:v.b*v.t**3/12, A:v=>v.b*v.t,
     desc:v=>`เหล็กเพลท ${v.b} × ${v.t} cm (${v.o==='edge'?'วางตั้ง':'วางแบน'})`,
-    shape:v=>v.o==='edge'?{w:v.t,h:v.b,ybar:v.b/2,d:R0(0,0,v.t,v.b)}:{w:v.b,h:v.t,ybar:v.t/2,d:R0(0,0,v.b,v.t)}}
+    shape:v=>v.o==='edge'?{w:v.t,h:v.b,ybar:v.b/2,d:R0(0,0,v.t,v.b)}:{w:v.b,h:v.t,ybar:v.t/2,d:R0(0,0,v.b,v.t)}},
+  ch:{u:'cm',p:[['H','ลึก H'],['B','กว้างปีก B'],['tw','หนาเอว tw'],['tf','หนาปีก tf']],d:{H:15,B:7.5,tw:0.65,tf:1},
+    ok:v=>v.H>2*v.tf&&v.B>v.tw, I:v=>(v.B*v.H**3-(v.B-v.tw)*(v.H-2*v.tf)**3)/12, A:v=>2*v.B*v.tf+(v.H-2*v.tf)*v.tw,
+    desc:v=>`เหล็ก Channel ${v.H} × ${v.B} × ${v.tw} × ${v.tf} cm`,
+    shape:v=>{const {H,B,tw,tf}=v;return {w:B,h:H,ybar:H/2,d:P0([[0,0],[B,0],[B,tf],[tw,tf],[tw,H-tf],[B,H-tf],[B,H],[0,H]])};}}
 };
 function R0(x,y,w,h){return `M${x} ${y}h${w}v${h}h${-w}Z`;}
 function C0(cx,cy,r){return `M${cx-r} ${cy}a${r} ${r} 0 1 0 ${2*r} 0a${r} ${r} 0 1 0 ${-2*r} 0Z`;}
@@ -439,7 +445,7 @@ function renderIin(){$('#Itype').value=S.Itype;const el=$('#Iin'),sk=$('#secsk')
   sk.hidden=false;const def=SECS[S.Itype],v=secVals(S.Itype);
   el.innerHTML=def.p.map(([k,l])=>k==='o'?`<label class="f">${l}<select id="sec-o" data-sec="o"><option value="flat" ${v.o!=='edge'?'selected':''}>วางแบน</option><option value="edge" ${v.o==='edge'?'selected':''}>วางตั้ง</option></select></label>`
     :`<label class="f">${l} (${def.u})<input class="num" id="sec-${k}" data-sec="${k}" type="number" step="0.05" min="0" value="${v[k]}"></label>`).join('');
-  $('#Inote').textContent=S.Itype==='rect'?'':S.Itype==='l'?'คิดรอบแกนนอนผ่าน centroid (ไม่ใช่แกน principal) · ไม่รวม fillet':'ไม่รวมรัศมี fillet ค่าอาจต่ำกว่าตารางเหล็กเล็กน้อย';}
+  $('#Inote').textContent=S.Itype==='rect'?'':S.Itype==='c'?'คิดมุมพับเป็นมุมเหลี่ยม ค่าสูงกว่าตารางเหล็กราว 3–5% (เช่น C100×50×20×2.3: ตาราง 80.7 cm⁴)':S.Itype==='l'?'คิดรอบแกนนอนผ่าน centroid (ไม่ใช่แกน principal) · ไม่รวม fillet':'ไม่รวมรัศมี fillet ค่าอาจต่ำกว่าตารางเหล็กเล็กน้อย';}
 function drawSec(){const sk=$('#secsk');if(S.Itype==='manual'){sk.innerHTML='';return;}
   const v=secVals(S.Itype),nums=SECS[S.Itype].p.filter(p=>p[0]!=='o').map(p=>+v[p[0]]);
   if(nums.some(x=>!(x>0))||!SECS[S.Itype].ok(v)){sk.innerHTML='';return;}
