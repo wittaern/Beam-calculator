@@ -471,7 +471,11 @@ function renderEin(){$('#Emode').value=S.Emode;const el=$('#Ein');
   el.innerHTML=S.Emode==='concrete'?`<label class="f">fc′ (ksc)<input class="num" id="fc" type="number" step="10" min="0" value="${S.fc}"></label>`
     :S.Emode==='manual'?`<label class="f">E (ksc)<input class="num" id="Eman" type="number" step="1000" min="0" value="${S.Eman}"></label>`:'';
   el.hidden=S.Emode==='steel';}
-function renderIin(){$('#Itype').value=S.Itype;const el=$('#Iin'),sk=$('#secsk');$('#secrow').style.gridTemplateColumns=S.Itype==='manual'?'minmax(0,1fr)':'';
+const IOPTS=[['rect','หน้าตัดสี่เหลี่ยมผืนผ้า'],['box','เหล็กกล่อง'],['pipe','เหล็กท่อ'],['wf','เหล็ก WF (H-beam)'],['c','เหล็กตัว C (รีดร้อน)'],
+  ['l','เหล็กตัว L'],['t','เหล็กตัว T'],['plate','เหล็กเพลท'],['ch','เหล็ก Channel (ตัวซีพับ)'],['manual','กรอกค่า I เอง']];
+const allowedI=()=>S.Emode==='concrete'?['rect']:S.Emode==='steel'?IOPTS.map(o=>o[0]).filter(k=>k!=='rect'):IOPTS.map(o=>o[0]);
+function fitItype(){const a=allowedI();if(!a.includes(S.Itype))S.Itype=a.includes('wf')?'wf':a[0];}
+function renderIin(){fitItype();const al=allowedI();$('#Itype').innerHTML=IOPTS.filter(o=>al.includes(o[0])).map(([k,l])=>`<option value="${k}">${l}</option>`).join('');$('#Itype').value=S.Itype;const el=$('#Iin'),sk=$('#secsk');$('#secrow').style.gridTemplateColumns=S.Itype==='manual'?'minmax(0,1fr)':'';
   if(S.Itype==='manual'){el.innerHTML=`<label class="f">I (cm⁴)<input class="num" id="Iman" type="number" step="100" min="0" value="${S.Iman}"></label>`;sk.hidden=true;$('#Inote').textContent='';return;}
   sk.hidden=false;const def=SECS[S.Itype],v=secVals(S.Itype);
   el.innerHTML=def.p.map(([k,l])=>k==='o'?`<label class="f">${l}<select id="sec-o" data-sec="o"><option value="flat" ${v.o!=='edge'?'selected':''}>วางแบน</option><option value="edge" ${v.o==='edge'?'selected':''}>วางตั้ง</option></select></label>`
@@ -678,7 +682,7 @@ document.querySelector('.rail').addEventListener('input',e=>{const t=e.target;
   if(t.dataset.k){const o=S[t.dataset.k].find(o=>o.id==t.dataset.id);if(!o)return;
     if(t.dataset.f==='type')o.type=t.value;else{let v=parseFloat(t.value);if(isNaN(v))return;if(POS.includes(t.dataset.f))v=clampL(v);o[t.dataset.f]=v;}update();return;}
   if(['proj','member','by'].includes(t.id)){S[t.id]=t.value;save();return;}
-  if(t.id==='Emode'){S.Emode=t.value;renderEin();update();return;}
+  if(t.id==='Emode'){S.Emode=t.value;renderEin();renderIin();update();return;}
   if(t.id==='Itype'){S.Itype=t.value;renderIin();update();return;}
   if(t.dataset.sec){const v=secVals(S.Itype);if(t.dataset.sec==='o')v.o=t.value;else{const x=parseFloat(t.value);if(isNaN(x))return;v[t.dataset.sec]=x;}update();return;}
   if(['L','snap','fc','Eman','Iman'].includes(t.id)){const v=parseFloat(t.value);if(isNaN(v))return;S[t.id]=v;update();}
