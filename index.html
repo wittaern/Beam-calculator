@@ -53,6 +53,9 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid 
 .sbtn:disabled{opacity:.45;cursor:default}
 .prow .sbtn.ghost:only-of-type{flex:none}
 .prow #pExport,.prow #pImport{flex:1}
+.ready{display:flex;flex-direction:column;gap:6px;background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px}
+.ready .sbtn{flex:1}
+.ready .sbtn.done{background:none;color:var(--shear);border-color:var(--shear)}
 .prop{display:flex;flex-direction:column;gap:8px;padding-top:10px;border-top:1px solid var(--line)}
 .prop select{width:100%}
 .secrow{display:grid;grid-template-columns:minmax(0,1fr) 112px;gap:10px;align-items:start}
@@ -194,6 +197,7 @@ main{display:flex;flex-direction:column;gap:12px;min-width:0}
         <div class="prow"><input class="txt" id="pName" type="text" placeholder="ชื่องาน" aria-label="ชื่องาน"><button class="sbtn" id="pSave">บันทึก</button></div>
         <div class="prow"><select id="pList" aria-label="งานที่บันทึกไว้"></select><button class="sbtn" id="pOpen">เปิด</button><button class="sbtn ghost" id="pDel">ลบ</button></div>
         <div class="prow"><button class="sbtn ghost" id="pExport">บันทึกไฟล์ (PDF + HTML)</button><button class="sbtn ghost" id="pImport">เปิดไฟล์</button><input type="file" id="pFile" accept=".html,.htm,.json,text/html,application/json" hidden></div>
+        <div class="ready" id="pReady" hidden><span>ไฟล์พร้อมแล้ว แตะเพื่อบันทึก</span><div class="prow"><button class="sbtn" id="pGetPdf">บันทึก PDF</button><button class="sbtn" id="pGetHtml">บันทึกไฟล์งาน</button></div></div>
         <p class="hint" id="pMsg">งานในรายการเก็บไว้ในเบราว์เซอร์นี้ · บันทึกไฟล์ได้ 2 ไฟล์: รายการคำนวณ .pdf และไฟล์งาน .beam.html (ดับเบิลคลิกเพื่อเปิดแก้ต่อ)</p>
       </section>
       <section class="box">
@@ -1075,10 +1079,15 @@ async function makePDF(){
     return pdf.output('blob');
   }finally{rep.innerHTML='';}
 }
+const IS_IOS=/iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const IS_MOBILE=IS_IOS||/Android/i.test(navigator.userAgent)||(window.matchMedia&&matchMedia('(pointer:coarse)').matches);
 async function saveBlob(fname,blob){
   await getDl();
   if(dlNS){await dlNS.save({filename:fname,data:blob});return 'saved';}
-  const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=fname;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);return 'downloaded';
+  if(IS_IOS&&navigator.canShare){const f=new File([blob],fname,{type:blob.type||'application/octet-stream'});
+    if(navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:fname});return 'shared';}catch(e){if(e&&e.name==='AbortError')throw {code:'declined'};}}}
+  const dl=IS_IOS?new Blob([blob],{type:'application/octet-stream'}):blob;
+  const u=URL.createObjectURL(dl),a=document.createElement('a');a.href=u;a.download=fname;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),8000);return 'downloaded';
 }
 
 /* ---------- Save / open jobs ---------- */
@@ -1119,20 +1128,31 @@ $('#pNew').addEventListener('click',()=>{
   if(!newArm){newArm=true;$('#pNew').textContent='ยืนยันเริ่มใหม่';pmsg('ค่าที่ยังไม่บันทึกจะหาย กดอีกครั้งเพื่อยืนยัน');setTimeout(()=>{newArm=false;$('#pNew').textContent='เริ่มงานใหม่';},4000);return;}
   newArm=false;$('#pNew').textContent='เริ่มงานใหม่';const keep={Emode:S.Emode,fc:S.fc,Itype:S.Itype,sec:S.sec};
   S=JSON.parse(JSON.stringify(DEF));Object.assign(S,keep);loadPreset('simple');S.Lb=S.L;syncGlobals();renderTools();renderTables();update();$('#pName').value='';renderJobs();pmsg('เริ่มงานใหม่แล้ว');});
+let pending=null;
 $('#pExport').addEventListener('click',async()=>{
-  const btn=$('#pExport');if(btn.disabled)return;btn.disabled=true;
+  const btn=$('#pExport');if(btn.disabled)return;btn.disabled=true;$('#pReady').hidden=true;
   const name=(($('#pName').value||'').trim()||jobName()).replace(/[\\/:*?"<>|]+/g,'-');
   const job={app:'beam-vm',version:1,savedAt:new Date().toISOString(),name,data:snapshot()};
-  const done=[],msgs=[];const why=err=>err&&err.code==='declined'?'ยกเลิก':err&&err.code?err.code:(err&&err.message)||String(err);
+  const msgs=[];const why=err=>err&&err.code==='declined'?'ยกเลิก':err&&err.code?err.code:(err&&err.message)||String(err);
   try{
     let pdfBlob=null;
     if(R.stable){pmsg('กำลังสร้าง PDF…');try{pdfBlob=await makePDF();}catch(err){msgs.push('สร้าง PDF ไม่สำเร็จ: '+why(err));}}
     else msgs.push('ไม่ได้สร้าง PDF เพราะ'+R.reason);
-    pmsg('เลือกบันทึกไฟล์ในหน้าต่างยืนยัน…');
-    try{await saveBlob(`${name}.beam.html`,new Blob([jobHTML(job)],{type:'text/html'}));done.push(`${name}.beam.html`);}catch(err){msgs.push('HTML: '+why(err));}
-    if(pdfBlob){try{await saveBlob(`${name}.pdf`,pdfBlob);done.push(`${name}.pdf`);}catch(err){msgs.push('PDF: '+why(err));}}
+    const files=[[`${name}.beam.html`,new Blob([jobHTML(job)],{type:'text/html'})]];if(pdfBlob)files.unshift([`${name}.pdf`,pdfBlob]);
+    await getDl();
+    if(IS_MOBILE&&!dlNS){ // phones need a fresh tap per file
+      pending=Object.fromEntries(files.map(([n,b])=>[n.endsWith('.pdf')?'pdf':'html',{n,b}]));
+      $('#pGetPdf').hidden=!pending.pdf;['pGetPdf','pGetHtml'].forEach(id=>{$('#'+id).classList.remove('done');});
+      $('#pGetPdf').textContent='บันทึก PDF';$('#pGetHtml').textContent='บันทึกไฟล์งาน';
+      $('#pReady').hidden=false;pmsg((IS_IOS?'แตะแต่ละปุ่ม แล้วเลือก "บันทึกไปยังไฟล์" (Save to Files)':'แตะแต่ละปุ่ม ไฟล์จะอยู่ในโฟลเดอร์ Downloads')+(msgs.length?' · '+msgs.join(' · '):''));return;}
+    const done=[];pmsg('เลือกบันทึกไฟล์ในหน้าต่างยืนยัน…');
+    for(const [n,b] of files.slice().reverse()){try{await saveBlob(n,b);done.push(n);}catch(err){msgs.push(n+': '+why(err));}}
     pmsg((done.length?'บันทึก '+done.join(' และ ')+' แล้ว':'ยังไม่ได้บันทึกไฟล์')+(msgs.length?' · '+msgs.join(' · '):''));
   }finally{btn.disabled=false;}});
+[['pGetPdf','pdf'],['pGetHtml','html']].forEach(([id,k])=>$('#'+id).addEventListener('click',async()=>{const p=pending&&pending[k];if(!p)return;
+  try{const r=await saveBlob(p.n,p.b);const el=$('#'+id);el.classList.add('done');el.textContent=(k==='pdf'?'PDF':'ไฟล์งาน')+' ✓';
+    pmsg(r==='shared'?`ส่ง ${p.n} ไปยังหน้าบันทึกแล้ว`:`ดาวน์โหลด ${p.n} แล้ว`+(IS_IOS?' (แอป Files → Downloads)':' (โฟลเดอร์ Downloads)'));}
+  catch(err){pmsg(err&&err.code==='declined'?'ยกเลิกการบันทึก':'บันทึกไม่ได้: '+((err&&err.message)||err));}}));
 $('#pImport').addEventListener('click',()=>$('#pFile').click());
 $('#pFile').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();
   rd.onload=()=>{try{const j=jobFromText(String(rd.result));const d=j&&j.app==='beam-vm'?j.data:j;if(!d||!Array.isArray(d.supports))throw 0;
