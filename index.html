@@ -47,7 +47,7 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid 
 .btn svg{width:16px;height:16px}
 .status{font-size:12px;color:var(--muted);min-height:1em}
 
-.app{display:grid;grid-template-columns:350px minmax(0,1fr);gap:18px;align-items:start}
+.app{display:grid;grid-template-columns:370px minmax(0,1fr);gap:18px;align-items:start}
 @media (max-width:960px){.app{grid-template-columns:minmax(0,1fr)}}
 .rail{display:flex;flex-direction:column;gap:14px}
 .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
@@ -64,7 +64,10 @@ table{border-collapse:collapse;width:100%}
 .tbl th{font-size:11px;font-weight:500;color:var(--muted);text-align:left;padding:0 4px 4px}
 .tbl td{padding:2px 3px}
 .tbl input.num{padding:5px 5px}
-.tbl th.fac,.tbl td.fac input{color:var(--accent)}
+.tbl input.num{padding:5px 4px;font-size:12.5px;text-align:right;-moz-appearance:textfield;appearance:textfield}
+.tbl input.num::-webkit-outer-spin-button,.tbl input.num::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.cap .rt{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;margin-left:auto;justify-content:flex-end}
+.cap .tag{font-weight:600;color:var(--ink)}
 .tbl td:last-child{width:28px}
 .del{border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:4px 6px;border-radius:5px}
 .del:hover{color:var(--load);background:var(--soft)}
@@ -187,9 +190,9 @@ main{display:flex;flex-direction:column;gap:12px;min-width:0}
       <div class="readout" id="readout"></div>
       <div id="banner" class="banner" hidden></div>
       <div class="plot"><div class="cap"><strong>Loading diagram</strong><span>P, w เป็นบวกเมื่อชี้ลง · M ที่กระทำ บวกเมื่อตามเข็ม</span></div><svg id="sch"></svg></div>
-      <div class="plot"><div class="cap"><strong>Shear force diagram, V (tonf)</strong><span>คูณ factor แล้ว · + เมื่อผลรวมแรงด้านซ้ายหน้าตัดชี้ขึ้น</span></div><svg id="sv"></svg></div>
-      <div class="plot"><div class="cap"><strong>Bending moment diagram, M (tonf·m)</strong><span>คูณ factor แล้ว</span><label class="chk"><input type="checkbox" id="flip"> วาดด้านรับแรงดึง (tension side)</label></div><svg id="sm"></svg></div>
-      <div class="plot"><div class="cap"><strong>Deflection, δ (cm)</strong><span><span id="eiCap"></span> · ใช้แรงใช้งาน ไม่คูณ factor</span></div><svg id="sd"></svg></div>
+      <div class="plot"><div class="cap"><strong>Shear force diagram, V (tonf)</strong><span class="rt"><span>+ เมื่อผลรวมแรงด้านซ้ายหน้าตัดชี้ขึ้น</span><span class="tag">factored load</span></span></div><svg id="sv"></svg></div>
+      <div class="plot"><div class="cap"><strong>Bending moment diagram, M (tonf·m)</strong><span class="rt"><label class="chk"><input type="checkbox" id="flip"> วาดด้านรับแรงดึง (tension side)</label><span class="tag">factored load</span></span></div><svg id="sm"></svg></div>
+      <div class="plot"><div class="cap"><strong>Deflection, δ (cm)</strong><span class="rt"><span id="eiCap"></span><span class="tag">service load</span></span></div><svg id="sd"></svg></div>
 
       <div class="res">
         <section class="box"><h2>Reactions</h2><div id="reacts"></div></section>
@@ -374,10 +377,10 @@ function renderTables(){
   for(const k in COLS){const rows=S[k];const el=$('#t-'+k);
     if(k==='supports')rows.sort((a,b)=>a.x-b.x);
     if(!rows.length){el.innerHTML='<div class="empty">ยังไม่มี</div>';continue;}
-    el.innerHTML=`<table class="tbl"><tr>${COLS[k].map(c=>`<th${c[0]==='f'?' class="fac"':''}>${c[1]}</th>`).join('')}<th></th></tr>${rows.map(r=>`<tr>${COLS[k].map(([f])=>{
+    el.innerHTML=`<table class="tbl"><tr>${COLS[k].map(c=>`<th>${c[1]}</th>`).join('')}<th></th></tr>${rows.map(r=>`<tr>${COLS[k].map(([f])=>{
       const id=`${k}-${r.id}-${f}`;
       if(f==='type')return `<td><select id="${id}" data-k="${k}" data-id="${r.id}" data-f="type" aria-label="ชนิด support">${['pin','roller','fixed'].map(t=>`<option value="${t}" ${r.type===t?'selected':''}>${cap1(t)}</option>`).join('')}</select></td>`;
-      return `<td${f==='f'?' class="fac"':''}><input class="num" type="number" step="${f==='x'||f==='a'||f==='b'?0.05:0.1}" id="${id}" data-k="${k}" data-id="${r.id}" data-f="${f}" value="${+(+r[f]).toFixed(4)}" aria-label="${f}"></td>`;}).join('')}<td><button class="del" data-del="${k}" data-id="${r.id}" aria-label="ลบ">×</button></td></tr>`).join('')}</table>`;}
+      return `<td><input class="num" type="number" step="${f==='x'||f==='a'||f==='b'?0.05:0.1}" id="${id}" data-k="${k}" data-id="${r.id}" data-f="${f}" value="${(+r[f]).toFixed(2)}" aria-label="${f}"></td>`;}).join('')}<td><button class="del" data-del="${k}" data-id="${r.id}" aria-label="ลบ">×</button></td></tr>`).join('')}</table>`;}
 }
 document.querySelector('.rail').addEventListener('input',e=>{const t=e.target;
   if(t.dataset.k){const o=S[t.dataset.k].find(o=>o.id==t.dataset.id);if(!o)return;
@@ -513,7 +516,7 @@ function renderResults(){
   $('#doiInfo').textContent=`(ตอนนี้: ${R.nr} reactions → ${R.doi<=0?'statically determinate':'indeterminate ดีกรี '+R.doi})`;
   const sorted=[...R.sups].sort((a,b)=>a.xc-b.xc);const ok=eqOk();
   $('#reacts').innerHTML=`<table class="kv"><tr><th>Support</th><th>x (m)</th><th>R<sub>y</sub> (tonf) ↑+</th><th>M (tonf·m) ↺+</th></tr>${sorted.map(s=>`<tr><td class="t">${cap1(s.type)}</td><td>${fmt(s.xc)}</td><td>${fmt(s.Fy,3)}</td><td>${s.type==='fixed'?fmt(s.Mr,3):'—'}</td></tr>`).join('')}</table>
-  <p class="hint" style="margin-top:8px">คูณ factor แล้ว · ΣR<sub>y</sub> = ${fmt(R.sumR,3)} tonf · Σ load = ${fmt(R.sumLoad,3)} tonf · ΣM<sub>x=0</sub> = ${fmt(R.sumM0,4)} <span class="${ok?'ok':'bad'}">${ok?'✓ สมดุล':'✗ ไม่สมดุล'}</span></p>`;
+  <p class="hint" style="margin-top:8px">factored load · ΣR<sub>y</sub> = ${fmt(R.sumR,3)} tonf · Σ load = ${fmt(R.sumLoad,3)} tonf · ΣM<sub>x=0</sub> = ${fmt(R.sumM0,4)} <span class="${ok?'ok':'bad'}">${ok?'✓ สมดุล':'✗ ไม่สมดุล'}</span></p>`;
   const e=extremes();
   $('#extremes').innerHTML=`<table class="kv"><tr><th>ค่า</th><th>ขนาด</th><th>ที่ x (m)</th></tr>
     <tr><td class="t">V<sub>max</sub> (+)</td><td>${fmt(e.vM.V,3)} tonf</td><td>${fmt(e.vM.x)}</td></tr>
@@ -549,7 +552,7 @@ function drawHover(){
 function xFromEvent(svg,e){const r=svg.getBoundingClientRect(),W=+svg.getAttribute('width');const px=(e.clientX-r.left)*W/r.width;return (px-PL)/(W-PL-PR)*R.L;}
 ['sv','sm','sd','sch'].forEach(id=>{const svg=$('#'+id);
   svg.addEventListener('pointermove',e=>{const x=xFromEvent(svg,e);if(id==='sch'||drag||udl)hoverX=snapX(x);else hoverX=Math.min(R.L,Math.max(0,x));
-    if(drag){const o=S[drag.kind].find(o=>o.id==drag.id);if(o&&o.x!==hoverX){o.x=hoverX;const inp=document.getElementById(`${drag.kind}-${o.id}-x`);if(inp)inp.value=o.x;requestUpdate();}return;}
+    if(drag){const o=S[drag.kind].find(o=>o.id==drag.id);if(o&&o.x!==hoverX){o.x=hoverX;const inp=document.getElementById(`${drag.kind}-${o.id}-x`);if(inp)inp.value=(+o.x).toFixed(2);requestUpdate();}return;}
     if(udl){udl.b=hoverX;renderSchematic();}
     drawHover();});
   svg.addEventListener('pointerleave',()=>{if(drag||udl)return;hoverX=null;drawHover();});
@@ -612,9 +615,9 @@ async function buildReport(){
   <div class="rs"><h3>3. Reactions (factored loads)</h3>
     <table><tr><th class="l">Support</th><th>x (m)</th><th>R<sub>y</sub> (tonf) ↑+</th><th>M<sub>R</sub> (tonf·m) ทวนเข็ม +</th></tr>${rows(sorted,s=>`<tr><td class="t">${cap1(s.type)}</td><td>${fmt(s.xc)}</td><td>${fmt(s.Fy,3)}</td><td>${s.type==='fixed'?fmt(s.Mr,3):'—'}</td></tr>`)}</table>
     <p style="margin-top:6px">ตรวจสมดุล (factored): ΣR<sub>y</sub> = ${fmt(R.sumR,3)} tonf, Σ น้ำหนัก = ${fmt(R.sumLoad,3)} tonf (ΣP = ${fmt(R.sumLoad-R.W,3)}, Σw = ${fmt(R.W,3)}) · ΣM รอบ x = 0 = ${fmt(R.sumM0,4)} tonf·m <b class="${ok?'ok':'bad'}">${ok?'สมดุล OK':'ไม่สมดุล'}</b></p></div>
-  <div class="rs"><h3>4. Shear force diagram, V<sub>u</sub> (tonf) — factored</h3><img src="${imgs.sv}" alt=""></div>
-  <div class="rs"><h3>5. Bending moment diagram, M<sub>u</sub> (tonf·m) — factored</h3><img src="${imgs.sm}" alt=""><div class="cap">${S.flip?'วาดด้านรับแรงดึง (tension side): โมเมนต์บวกอยู่ใต้แกน':'โมเมนต์บวก (sagging) อยู่เหนือแกน'}</div></div>
-  <div class="rs"><h3>6. Deflection, δ (cm) — service load (ไม่คูณ factor)</h3><img src="${imgs.sd}" alt=""></div>
+  <div class="rs"><h3>4. Shear force diagram, V<sub>u</sub> (tonf) — factored load</h3><img src="${imgs.sv}" alt=""></div>
+  <div class="rs"><h3>5. Bending moment diagram, M<sub>u</sub> (tonf·m) — factored load</h3><img src="${imgs.sm}" alt=""><div class="cap">${S.flip?'วาดด้านรับแรงดึง (tension side): โมเมนต์บวกอยู่ใต้แกน':'โมเมนต์บวก (sagging) อยู่เหนือแกน'}</div></div>
+  <div class="rs"><h3>6. Deflection, δ (cm) — service load</h3><img src="${imgs.sd}" alt=""></div>
   <div class="rs"><h3>7. สรุปค่าสูงสุด</h3>
     <table><tr><th class="l">รายการ</th><th>ค่า</th><th class="l">หน่วย</th><th>ที่ x (m)</th></tr>
       <tr><td class="t">V<sub>max</sub> (+)</td><td>${fmt(e.vM.V,3)}</td><td class="t l">tonf</td><td>${fmt(e.vM.x)}</td></tr>
