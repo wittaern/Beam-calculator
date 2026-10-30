@@ -63,6 +63,8 @@ label.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--mu
 table{border-collapse:collapse;width:100%}
 .tbl th{font-size:11px;font-weight:500;color:var(--muted);text-align:left;padding:0 4px 4px}
 .tbl td{padding:2px 3px}
+.tbl input.num{padding:5px 5px}
+.tbl th.fac,.tbl td.fac input{color:var(--accent)}
 .tbl td:last-child{width:28px}
 .del{border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:4px 6px;border-radius:5px}
 .del:hover{color:var(--load);background:var(--soft)}
@@ -185,9 +187,9 @@ main{display:flex;flex-direction:column;gap:12px;min-width:0}
       <div class="readout" id="readout"></div>
       <div id="banner" class="banner" hidden></div>
       <div class="plot"><div class="cap"><strong>Loading diagram</strong><span>P, w เป็นบวกเมื่อชี้ลง · M ที่กระทำ บวกเมื่อตามเข็ม</span></div><svg id="sch"></svg></div>
-      <div class="plot"><div class="cap"><strong>Shear force diagram, V (tonf)</strong><span>+ เมื่อผลรวมแรงด้านซ้ายหน้าตัดชี้ขึ้น</span></div><svg id="sv"></svg></div>
-      <div class="plot"><div class="cap"><strong>Bending moment diagram, M (tonf·m)</strong><label class="chk"><input type="checkbox" id="flip"> วาดด้านรับแรงดึง (tension side)</label></div><svg id="sm"></svg></div>
-      <div class="plot"><div class="cap"><strong>Deflection, δ (cm)</strong><span id="eiCap"></span></div><svg id="sd"></svg></div>
+      <div class="plot"><div class="cap"><strong>Shear force diagram, V (tonf)</strong><span>คูณ factor แล้ว · + เมื่อผลรวมแรงด้านซ้ายหน้าตัดชี้ขึ้น</span></div><svg id="sv"></svg></div>
+      <div class="plot"><div class="cap"><strong>Bending moment diagram, M (tonf·m)</strong><span>คูณ factor แล้ว</span><label class="chk"><input type="checkbox" id="flip"> วาดด้านรับแรงดึง (tension side)</label></div><svg id="sm"></svg></div>
+      <div class="plot"><div class="cap"><strong>Deflection, δ (cm)</strong><span><span id="eiCap"></span> · ใช้แรงใช้งาน ไม่คูณ factor</span></div><svg id="sd"></svg></div>
 
       <div class="res">
         <section class="box"><h2>Reactions</h2><div id="reacts"></div></section>
@@ -335,11 +337,12 @@ const PRESETS={
 };
 let S={L:10,E:233928,I:260417,snap:0.05,flip:false,tool:'pin',proj:'',member:'',by:'',supports:[],points:[],dists:[],moments:[]};
 function loadPreset(k){const p=PRESETS[k];S.L=p.L;
-  S.supports=p.s.map(([x,type])=>({id:nid(),x,type}));S.points=p.p.map(([x,P])=>({id:nid(),x,P}));
-  S.dists=p.d.map(([a,b,w1,w2])=>({id:nid(),a,b,w1,w2}));S.moments=p.m.map(([x,M])=>({id:nid(),x,M}));}
+  S.supports=p.s.map(([x,type])=>({id:nid(),x,type}));S.points=p.p.map(([x,P])=>({id:nid(),x,P,f:1}));
+  S.dists=p.d.map(([a,b,w1,w2])=>({id:nid(),a,b,w1,w2,f:1}));S.moments=p.m.map(([x,M])=>({id:nid(),x,M,f:1}));}
 const SKEY='beamVM_tonf_v1';
 try{const sv=JSON.parse(localStorage.getItem(SKEY)||'null');if(sv&&sv.supports){S=Object.assign(S,sv);
-  uid=1+Math.max(0,...['supports','points','dists','moments'].flatMap(k=>S[k].map(o=>o.id)));}else loadPreset('cont2');}catch(e){loadPreset('cont2');}
+  uid=1+Math.max(0,...['supports','points','dists','moments'].flatMap(k=>S[k].map(o=>o.id)));
+  ['points','dists','moments'].forEach(k=>S[k].forEach(o=>{if(!isFinite(parseFloat(o.f)))o.f=1;}));}else loadPreset('cont2');}catch(e){loadPreset('cont2');}
 const save=()=>{try{localStorage.setItem(SKEY,JSON.stringify(S));}catch(e){}};
 
 const fmt=(v,d=2)=>{if(!isFinite(v))return'—';const s=(Math.abs(v)<0.5*Math.pow(10,-d)?0:v).toFixed(d);return s.replace('-','−');};
@@ -363,18 +366,18 @@ $('#tools').addEventListener('click',e=>{const b=e.target.closest('[data-tool]')
 /* tables */
 const COLS={
   supports:[['x','x (m)'],['type','ชนิด']],
-  points:[['x','x (m)'],['P','P (tonf)']],
-  dists:[['a','เริ่ม (m)'],['b','สิ้นสุด (m)'],['w1','w₁ (t/m)'],['w2','w₂ (t/m)']],
-  moments:[['x','x (m)'],['M','M (t·m)']]
+  points:[['x','x (m)'],['P','P (tonf)'],['f','Factor']],
+  dists:[['a','เริ่ม (m)'],['b','สิ้นสุด (m)'],['w1','w₁ (t/m)'],['w2','w₂ (t/m)'],['f','Factor']],
+  moments:[['x','x (m)'],['M','M (t·m)'],['f','Factor']]
 };
 function renderTables(){
   for(const k in COLS){const rows=S[k];const el=$('#t-'+k);
     if(k==='supports')rows.sort((a,b)=>a.x-b.x);
     if(!rows.length){el.innerHTML='<div class="empty">ยังไม่มี</div>';continue;}
-    el.innerHTML=`<table class="tbl"><tr>${COLS[k].map(c=>`<th>${c[1]}</th>`).join('')}<th></th></tr>${rows.map(r=>`<tr>${COLS[k].map(([f])=>{
+    el.innerHTML=`<table class="tbl"><tr>${COLS[k].map(c=>`<th${c[0]==='f'?' class="fac"':''}>${c[1]}</th>`).join('')}<th></th></tr>${rows.map(r=>`<tr>${COLS[k].map(([f])=>{
       const id=`${k}-${r.id}-${f}`;
       if(f==='type')return `<td><select id="${id}" data-k="${k}" data-id="${r.id}" data-f="type" aria-label="ชนิด support">${['pin','roller','fixed'].map(t=>`<option value="${t}" ${r.type===t?'selected':''}>${cap1(t)}</option>`).join('')}</select></td>`;
-      return `<td><input class="num" type="number" step="${f==='x'||f==='a'||f==='b'?0.05:0.1}" id="${id}" data-k="${k}" data-id="${r.id}" data-f="${f}" value="${+(+r[f]).toFixed(4)}" aria-label="${f}"></td>`;}).join('')}<td><button class="del" data-del="${k}" data-id="${r.id}" aria-label="ลบ">×</button></td></tr>`).join('')}</table>`;}
+      return `<td${f==='f'?' class="fac"':''}><input class="num" type="number" step="${f==='x'||f==='a'||f==='b'?0.05:0.1}" id="${id}" data-k="${k}" data-id="${r.id}" data-f="${f}" value="${+(+r[f]).toFixed(4)}" aria-label="${f}"></td>`;}).join('')}<td><button class="del" data-del="${k}" data-id="${r.id}" aria-label="ลบ">×</button></td></tr>`).join('')}</table>`;}
 }
 document.querySelector('.rail').addEventListener('input',e=>{const t=e.target;
   if(t.dataset.k){const o=S[t.dataset.k].find(o=>o.id==t.dataset.id);if(!o)return;
@@ -388,9 +391,9 @@ document.querySelector('.rail').addEventListener('click',e=>{
 });
 function addItem(k,x,x2){
   if(k==='supports')S.supports.push({id:nid(),x,type:S.tool==='roller'||S.tool==='fixed'?S.tool:'pin'});
-  if(k==='points')S.points.push({id:nid(),x,P:2});
-  if(k==='moments')S.moments.push({id:nid(),x,M:1});
-  if(k==='dists'){const a=x2!=null?Math.min(x,x2):Math.max(0,x-1),b=x2!=null?Math.max(x,x2):Math.min(S.L,x+1);S.dists.push({id:nid(),a,b,w1:1,w2:1});}
+  if(k==='points')S.points.push({id:nid(),x,P:2,f:1});
+  if(k==='moments')S.moments.push({id:nid(),x,M:1,f:1});
+  if(k==='dists'){const a=x2!=null?Math.min(x,x2):Math.max(0,x-1),b=x2!=null?Math.max(x,x2):Math.min(S.L,x+1);S.dists.push({id:nid(),a,b,w1:1,w2:1,f:1});}
   renderTables();update();
 }
 $('#preset').addEventListener('change',e=>{if(!e.target.value)return;loadPreset(e.target.value);e.target.value='';syncGlobals();renderTables();update();});
@@ -410,7 +413,7 @@ const SCH_H=210;
 
 function schematicMarkup(W,live){
   const sx=sxF(W),by=122;let g='';
-  const ds=[...R.dls];if(live&&udl&&udl.b!=null)ds.push({a:Math.min(udl.a,udl.b),b:Math.max(udl.a,udl.b),w1:1,w2:1,ghost:true});
+  const ds=(R.svc?R.svc.dls:R.dls).map(d=>({...d,fs:fstr(S.dists.find(o=>o.id==d.id)||{})}));if(live&&udl&&udl.b!=null)ds.push({a:Math.min(udl.a,udl.b),b:Math.max(udl.a,udl.b),w1:1,w2:1,ghost:true});
   const wmax=Math.max(1e-9,...ds.map(d=>Math.max(Math.abs(d.w1),Math.abs(d.w2))));
   ds.forEach(d=>{const x1=sx(d.a),x2=sx(d.b),h1=Math.abs(d.w1)/wmax*44,h2=Math.abs(d.w2)/wmax*44,y0=by-5;
     const c=d.ghost?'var(--muted)':'var(--load)';
@@ -418,8 +421,8 @@ function schematicMarkup(W,live){
     const n=Math.max(2,Math.round((x2-x1)/26));
     for(let i=0;i<=n;i++){const t=i/n,X=x1+(x2-x1)*t,w=d.w1+(d.w2-d.w1)*t,hh=h1+(h2-h1)*t;if(hh<5)continue;
       if(w>=0){g+=ln(X,y0-hh,X,y0-5,c,1)+tri(X,y0,1,c,3.2);}else{g+=ln(X,y0-5,X,y0-hh,c,1)+tri(X,y0-hh,-1,c,3.2);}}
-    if(!d.ghost){if(Math.abs(d.w1-d.w2)<1e-9)g+=tx((x1+x2)/2,y0-h1-7,`${fmt(d.w1,2)} t/m`,c);
-      else{g+=tx(x1,y0-h1-7,fmt(d.w1,2),c,'start');g+=tx(x2,y0-h2-7,fmt(d.w2,2)+' t/m',c,'end');}}
+    if(!d.ghost){if(Math.abs(d.w1-d.w2)<1e-9)g+=tx((x1+x2)/2,y0-h1-7,`${fmt(d.w1,2)} t/m${d.fs}`,c);
+      else{g+=tx(x1,y0-h1-7,fmt(d.w1,2),c,'start');g+=tx(x2,y0-h2-7,fmt(d.w2,2)+' t/m'+d.fs,c,'end');}}
   });
   g+=`<rect x="${sx(0)}" y="${by-4}" width="${sx(R.L)-sx(0)}" height="8" rx="1" style="fill:var(--beam)"/>`;
   S.supports.forEach(s=>{const X=sx(Math.min(R.L,Math.max(0,s.x))),y=by+4,c='var(--beam)';let sym='';
@@ -431,13 +434,13 @@ function schematicMarkup(W,live){
       else{sym=`<rect x="${X-7}" y="${by-20}" width="14" height="40" style="fill:var(--panel);stroke:${c};stroke-width:1.6"/>`;for(let k=-18;k<=14;k+=6)sym+=ln(X-7,by+k+6,X+7,by+k,c,.9);}}
     g+=sym+(live?`<rect data-kind="supports" data-id="${s.id}" x="${X-15}" y="${by-26}" width="30" height="58" style="fill:transparent;cursor:ew-resize" pointer-events="all"/>`:'');});
   S.points.forEach(p=>{const X=sx(Math.min(R.L,Math.max(0,p.x))),c='var(--load)',up=p.P<0;
-    g+=up?ln(X,by+8,X,by+52,c,2)+tri(X,by+5,-1,c,5)+tx(X,by+64,`${fmt(Math.abs(p.P),2)} t ↑`,c)
-          :ln(X,30,X,by-10,c,2)+tri(X,by-5,1,c,5)+tx(X,24,`${fmt(p.P,2)} t`,c);
+    g+=up?ln(X,by+8,X,by+52,c,2)+tri(X,by+5,-1,c,5)+tx(X,by+64,`${fmt(Math.abs(p.P),2)} t${fstr(p)} ↑`,c)
+          :ln(X,30,X,by-10,c,2)+tri(X,by-5,1,c,5)+tx(X,24,`${fmt(p.P,2)} t${fstr(p)}`,c);
     if(live)g+=`<rect data-kind="points" data-id="${p.id}" x="${X-12}" y="${up?by:16}" width="24" height="${up?60:by-16}" style="fill:transparent;cursor:ew-resize" pointer-events="all"/>`;});
   S.moments.forEach(m=>{const X=sx(Math.min(R.L,Math.max(0,m.x))),c='var(--load)',r=17,cw=m.M>=0;
     g+=`<path d="M${X-r} ${by} A${r} ${r} 0 1 1 ${X+r} ${by}" style="fill:none;stroke:${c};stroke-width:1.8"/>`;
     g+=cw?`<path d="M${X+r-5} ${by-5} L${X+r} ${by+3} L${X+r+5} ${by-5}Z" style="fill:${c}"/>`:`<path d="M${X-r-5} ${by-5} L${X-r} ${by+3} L${X-r+5} ${by-5}Z" style="fill:${c}"/>`;
-    g+=tx(X,by-r-8,`${fmt(Math.abs(m.M),2)} t·m ${cw?'↻':'↺'}`,c);
+    g+=tx(X,by-r-8,`${fmt(Math.abs(m.M),2)} t·m${fstr(m)} ${cw?'↻':'↺'}`,c);
     if(live)g+=`<rect data-kind="moments" data-id="${m.id}" x="${X-r-6}" y="${by-r-6}" width="${2*r+12}" height="${r+10}" style="fill:transparent;cursor:ew-resize" pointer-events="all"/>`;});
   const ay=184;g+=ln(sx(0),ay,sx(R.L),ay,'var(--muted)',1);
   let last=-1e9;R.keys.forEach(k=>{const X=sx(k);g+=ln(X,ay-4,X,ay+4,'var(--muted)',1);if(X-last>34||k===R.L){g+=tx(X,ay+18,fmt(k,2),'var(--muted)');last=X;}});
@@ -510,7 +513,7 @@ function renderResults(){
   $('#doiInfo').textContent=`(ตอนนี้: ${R.nr} reactions → ${R.doi<=0?'statically determinate':'indeterminate ดีกรี '+R.doi})`;
   const sorted=[...R.sups].sort((a,b)=>a.xc-b.xc);const ok=eqOk();
   $('#reacts').innerHTML=`<table class="kv"><tr><th>Support</th><th>x (m)</th><th>R<sub>y</sub> (tonf) ↑+</th><th>M (tonf·m) ↺+</th></tr>${sorted.map(s=>`<tr><td class="t">${cap1(s.type)}</td><td>${fmt(s.xc)}</td><td>${fmt(s.Fy,3)}</td><td>${s.type==='fixed'?fmt(s.Mr,3):'—'}</td></tr>`).join('')}</table>
-  <p class="hint" style="margin-top:8px">ΣR<sub>y</sub> = ${fmt(R.sumR,3)} tonf · Σ load = ${fmt(R.sumLoad,3)} tonf · ΣM<sub>x=0</sub> = ${fmt(R.sumM0,4)} <span class="${ok?'ok':'bad'}">${ok?'✓ สมดุล':'✗ ไม่สมดุล'}</span></p>`;
+  <p class="hint" style="margin-top:8px">คูณ factor แล้ว · ΣR<sub>y</sub> = ${fmt(R.sumR,3)} tonf · Σ load = ${fmt(R.sumLoad,3)} tonf · ΣM<sub>x=0</sub> = ${fmt(R.sumM0,4)} <span class="${ok?'ok':'bad'}">${ok?'✓ สมดุล':'✗ ไม่สมดุล'}</span></p>`;
   const e=extremes();
   $('#extremes').innerHTML=`<table class="kv"><tr><th>ค่า</th><th>ขนาด</th><th>ที่ x (m)</th></tr>
     <tr><td class="t">V<sub>max</sub> (+)</td><td>${fmt(e.vM.V,3)} tonf</td><td>${fmt(e.vM.x)}</td></tr>
@@ -522,7 +525,11 @@ function renderResults(){
   $('#eqs').innerHTML=`<table class="kv eq"><tr><th>ช่วง x (m)</th><th style="text-align:left">V(ξ) tonf</th><th style="text-align:left">M(ξ) tonf·m</th></tr>${R.regions.map(r=>`<tr><td class="r">${fmt(r.x0)} – ${fmt(r.x1)}</td><td>${polyStr(r.V)}</td><td>${polyStr(r.M)}</td></tr>`).join('')}</table>`;
 }
 
-function update(){R=solveBeam(S);save();renderSchematic();renderDiagrams();renderResults();drawHover();}
+const fac=o=>{const f=parseFloat(o.f);return isFinite(f)?f:1;};
+const fstr=o=>Math.abs(fac(o)-1)>1e-12?` ×${+fac(o).toFixed(3)}`:'';
+function factored(){return {...S,points:S.points.map(p=>({...p,P:(+p.P||0)*fac(p)})),moments:S.moments.map(m=>({...m,M:(+m.M||0)*fac(m)})),
+  dists:S.dists.map(d=>({...d,w1:(+d.w1||0)*fac(d),w2:(+d.w2||0)*fac(d)}))};}
+function update(){R=solveBeam(factored());const Rs=solveBeam(S);R.svc=Rs;if(R.stable&&Rs.stable)R.defl=Rs.defl;save();renderSchematic();renderDiagrams();renderResults();drawHover();}
 
 /* hover crosshair */
 function drawHover(){
@@ -596,18 +603,18 @@ async function buildReport(){
         <tr><td class="t">Moment of inertia I</td><td>${fmtI(S.I)}</td><td class="t l">cm⁴</td></tr>
         <tr><td class="t">EI = E·I</td><td>${fmtSci(S.E*S.I)}</td><td class="t l">kg·cm²</td></tr></table>
         <div class="sub">Supports</div><table><tr><th class="l">ชนิด</th><th>x (m)</th><th class="l">ยึดรั้ง</th></tr>${rows(sorted,s=>`<tr><td class="t">${cap1(s.type)}</td><td>${fmt(s.xc)}</td><td class="t l">${s.type==='fixed'?'v = 0, θ = 0':'v = 0'}</td></tr>`)}</table></div>
-      <div><div class="sub" style="margin-top:0">Point loads (+ ลง)</div><table><tr><th class="l">#</th><th>x (m)</th><th>P (tonf)</th></tr>${rows(R.pts,(p,i)=>`<tr><td>P${i+1}</td><td>${fmt(p.xc)}</td><td>${fmt(p.P,3)}</td></tr>`)}</table>
-        <div class="sub">Distributed loads (+ ลง)</div><table><tr><th class="l">#</th><th>เริ่ม (m)</th><th>สิ้นสุด (m)</th><th>w₁ (t/m)</th><th>w₂ (t/m)</th></tr>${rows(R.dls,(d,i)=>`<tr><td>w${i+1}</td><td>${fmt(d.a)}</td><td>${fmt(d.b)}</td><td>${fmt(d.w1,3)}</td><td>${fmt(d.w2,3)}</td></tr>`)}</table>
-        <div class="sub">Applied moments (+ ตามเข็ม)</div><table><tr><th class="l">#</th><th>x (m)</th><th>M (tonf·m)</th></tr>${rows(R.mos,(m,i)=>`<tr><td>M${i+1}</td><td>${fmt(m.xc)}</td><td>${fmt(m.M,3)}</td></tr>`)}</table></div>
+      <div><div class="sub" style="margin-top:0">Point loads (+ ลง)</div><table><tr><th class="l">#</th><th>x (m)</th><th>P (tonf)</th><th>Factor</th><th>P<sub>u</sub> (tonf)</th></tr>${rows(R.svc.pts,(p,i)=>`<tr><td>P${i+1}</td><td>${fmt(p.xc)}</td><td>${fmt(p.P,3)}</td><td>${fmt(fac(p),2)}</td><td>${fmt(p.P*fac(p),3)}</td></tr>`)}</table>
+        <div class="sub">Distributed loads (+ ลง)</div><table><tr><th class="l">#</th><th>เริ่ม (m)</th><th>สิ้นสุด (m)</th><th>w₁ (t/m)</th><th>w₂ (t/m)</th><th>Factor</th></tr>${rows(R.svc.dls,(d,i)=>`<tr><td>w${i+1}</td><td>${fmt(d.a)}</td><td>${fmt(d.b)}</td><td>${fmt(d.w1,3)}</td><td>${fmt(d.w2,3)}</td><td>${fmt(fac(S.dists.find(o=>o.id==d.id)||{}),2)}</td></tr>`)}</table>
+        <div class="sub">Applied moments (+ ตามเข็ม)</div><table><tr><th class="l">#</th><th>x (m)</th><th>M (tonf·m)</th><th>Factor</th><th>M<sub>u</sub> (tonf·m)</th></tr>${rows(R.svc.mos,(m,i)=>`<tr><td>M${i+1}</td><td>${fmt(m.xc)}</td><td>${fmt(m.M,3)}</td><td>${fmt(fac(m),2)}</td><td>${fmt(m.M*fac(m),3)}</td></tr>`)}</table></div>
     </div>
   </div>
   <div class="rs"><h3>2. Loading diagram</h3><img src="${imgSch}" alt=""></div>
-  <div class="rs"><h3>3. Reactions</h3>
+  <div class="rs"><h3>3. Reactions (factored loads)</h3>
     <table><tr><th class="l">Support</th><th>x (m)</th><th>R<sub>y</sub> (tonf) ↑+</th><th>M<sub>R</sub> (tonf·m) ทวนเข็ม +</th></tr>${rows(sorted,s=>`<tr><td class="t">${cap1(s.type)}</td><td>${fmt(s.xc)}</td><td>${fmt(s.Fy,3)}</td><td>${s.type==='fixed'?fmt(s.Mr,3):'—'}</td></tr>`)}</table>
-    <p style="margin-top:6px">ตรวจสมดุล: ΣR<sub>y</sub> = ${fmt(R.sumR,3)} tonf, Σ น้ำหนัก = ${fmt(R.sumLoad,3)} tonf (ΣP = ${fmt(R.sumLoad-R.W,3)}, Σw = ${fmt(R.W,3)}) · ΣM รอบ x = 0 = ${fmt(R.sumM0,4)} tonf·m <b class="${ok?'ok':'bad'}">${ok?'สมดุล OK':'ไม่สมดุล'}</b></p></div>
-  <div class="rs"><h3>4. Shear force diagram, V (tonf)</h3><img src="${imgs.sv}" alt=""></div>
-  <div class="rs"><h3>5. Bending moment diagram, M (tonf·m)</h3><img src="${imgs.sm}" alt=""><div class="cap">${S.flip?'วาดด้านรับแรงดึง (tension side): โมเมนต์บวกอยู่ใต้แกน':'โมเมนต์บวก (sagging) อยู่เหนือแกน'}</div></div>
-  <div class="rs"><h3>6. Deflection, δ (cm)</h3><img src="${imgs.sd}" alt=""></div>
+    <p style="margin-top:6px">ตรวจสมดุล (factored): ΣR<sub>y</sub> = ${fmt(R.sumR,3)} tonf, Σ น้ำหนัก = ${fmt(R.sumLoad,3)} tonf (ΣP = ${fmt(R.sumLoad-R.W,3)}, Σw = ${fmt(R.W,3)}) · ΣM รอบ x = 0 = ${fmt(R.sumM0,4)} tonf·m <b class="${ok?'ok':'bad'}">${ok?'สมดุล OK':'ไม่สมดุล'}</b></p></div>
+  <div class="rs"><h3>4. Shear force diagram, V<sub>u</sub> (tonf) — factored</h3><img src="${imgs.sv}" alt=""></div>
+  <div class="rs"><h3>5. Bending moment diagram, M<sub>u</sub> (tonf·m) — factored</h3><img src="${imgs.sm}" alt=""><div class="cap">${S.flip?'วาดด้านรับแรงดึง (tension side): โมเมนต์บวกอยู่ใต้แกน':'โมเมนต์บวก (sagging) อยู่เหนือแกน'}</div></div>
+  <div class="rs"><h3>6. Deflection, δ (cm) — service load (ไม่คูณ factor)</h3><img src="${imgs.sd}" alt=""></div>
   <div class="rs"><h3>7. สรุปค่าสูงสุด</h3>
     <table><tr><th class="l">รายการ</th><th>ค่า</th><th class="l">หน่วย</th><th>ที่ x (m)</th></tr>
       <tr><td class="t">V<sub>max</sub> (+)</td><td>${fmt(e.vM.V,3)}</td><td class="t l">tonf</td><td>${fmt(e.vM.x)}</td></tr>
