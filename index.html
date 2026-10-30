@@ -234,11 +234,11 @@ main{display:flex;flex-direction:column;gap:12px;min-width:0}
       <section class="box" id="steelBox" hidden>
         <h2>ตรวจสอบหน้าตัดเหล็ก — AISC 360-16 LRFD <span class="tag">factored load</span></h2>
         <div class="steel-in">
-          <label class="f">F<sub>y</sub> (ksc)<input class="num" id="Fy" type="number" step="50" min="0"></label>
-          <label class="f">L<sub>b</sub> (m)<input class="num" id="Lb" type="number" step="0.1" min="0"></label>
-          <label class="f">C<sub>b</sub><input class="num" id="Cb" type="number" step="0.05" min="1"></label>
+          <label class="f"><span>F<sub>y</sub> (ksc)</span><input class="num" id="Fy" type="number" step="50" min="0"></label>
+          <label class="f"><span>L<sub>b</sub></span><input class="num" id="Lb" type="number" step="0.1" min="0"></label>
+          <label class="f"><span>C<sub>b</sub></span><input class="num" id="Cb" type="number" step="0.05" min="1"></label>
         </div>
-        <p class="hint">L<sub>b</sub> = ระยะค้ำยันด้านข้าง · SS400 ≈ 2,500 ksc (245 MPa) · SM520 ≈ 3,600 ksc (355 MPa) · A36 ≈ 2,530 ksc · C<sub>b</sub> = 1.0 conservative</p>
+        <p class="hint">L<sub>b</sub> = ระยะค้ำยันด้านข้าง (m) · SS400 ≈ 2,500 ksc (245 MPa) · SM520 ≈ 3,600 ksc (355 MPa) · A36 ≈ 2,530 ksc · C<sub>b</sub> = 1.0 conservative</p>
         <div id="steelOut"></div>
       </section>
       <div class="plot"><div class="cap"><strong>Deflection, δ (cm)</strong><span class="rt"><span id="eiCap"></span><span class="tag">service load</span></span></div><svg id="sd"></svg></div>
