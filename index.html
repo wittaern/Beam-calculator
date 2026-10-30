@@ -72,6 +72,8 @@ input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid 
 .bar i{display:block;height:100%}
 .bar i.pass{background:var(--shear)} .bar i.fail{background:var(--warn)}
 #steelBox .kv td{font-size:12.5px;padding:3px 6px}
+#rcBox .tag{font-weight:600;color:var(--ink);text-transform:none;letter-spacing:0;font-size:12px}
+.rc-plot{border-color:var(--line);margin-inline:-4px}
 
 .app{display:grid;grid-template-columns:370px minmax(0,1fr);gap:18px;align-items:start}
 @media (max-width:960px){.app{grid-template-columns:minmax(0,1fr)}}
@@ -244,6 +246,18 @@ main{display:flex;flex-direction:column;gap:12px;min-width:0}
         <p class="hint">L<sub>b</sub> = ระยะค้ำยันด้านข้าง (m) · C<sub>b</sub> = 1.0 conservative · เลือก "กรอกค่าเอง" เพื่อใส่ F<sub>y</sub> อื่น</p>
         <div id="steelOut"></div>
       </section>
+      <section class="box" id="rcBox" hidden>
+        <h2>ออกแบบเหล็กเสริมคอนกรีต — ACI 318 <span class="tag">factored load</span></h2>
+        <div class="steel-in">
+          <label class="f"><span>เหล็กรับโมเมนต์</span><select id="fyMain"><option value="SR24">SR24</option><option value="SD40">SD40</option><option value="SD50">SD50</option></select></label>
+          <label class="f"><span>เหล็กรับแรงเฉือน</span><select id="fyStir"><option value="SR24">SR24</option><option value="SD40">SD40</option><option value="SD50">SD50</option></select></label>
+          <label class="f"><span>d′ (cm)</span><input class="num" id="rcCover" type="number" step="0.5" min="0"></label>
+        </div>
+        <p class="hint">SR24 f<sub>y</sub> = 2,400 · SD40 = 4,000 · SD50 = 5,000 ksc · d′ = ระยะจากผิวคอนกรีตถึงศูนย์กลางเหล็กรับแรงดึง (d = h − d′)</p>
+        <div id="rcSum"></div>
+        <div class="plot rc-plot"><div class="cap"><strong>เหล็กรับแรงเฉือน A<sub>v</sub>/s (cm²/m)</strong></div><svg id="sav"></svg></div>
+        <div class="plot rc-plot"><div class="cap"><strong>เหล็กรับโมเมนต์ A<sub>s</sub> (cm²)</strong><span class="rt"><span>+ = เหล็กล่าง · − = เหล็กบน</span></span></div><svg id="sas"></svg></div>
+      </section>
       <div class="plot"><div class="cap"><strong>Deflection, δ (cm)</strong><span class="rt"><span id="eiCap"></span><span class="tag">service load</span></span></div><svg id="sd"></svg></div>
 
       <div class="res">
@@ -390,7 +404,7 @@ const PRESETS={
   overhang:{L:8,s:[[0,'pin'],[6,'roller']],p:[[8,2]],d:[[0,6,1,1]],m:[[3,1.5]]},
   fixed:{L:6,s:[[0,'fixed'],[6,'fixed']],p:[[2,4]],d:[],m:[]}
 };
-let S={Fy:2350,grade:'SM400',FyMan:2350,Cb:1,secUnit:'cm',cSwap2:true,L:10,E:233928,I:260417,Emode:'concrete',fc:240,Eman:233928,Itype:'rect',Iman:260417,sec:{},snap:0.05,flip:false,tool:'pin',proj:'',member:'',by:'',supports:[],points:[],dists:[],moments:[]};
+let S={rcCover:5,fyMain:'SD40',fyStir:'SR24',Fy:2350,grade:'SM400',FyMan:2350,Cb:1,secUnit:'cm',cSwap2:true,L:10,E:233928,I:260417,Emode:'concrete',fc:240,Eman:233928,Itype:'rect',Iman:260417,sec:{},snap:0.05,flip:false,tool:'pin',proj:'',member:'',by:'',supports:[],points:[],dists:[],moments:[]};
 function loadPreset(k){const p=PRESETS[k];S.L=p.L;
   S.supports=p.s.map(([x,type])=>({id:nid(),x,type}));S.points=p.p.map(([x,P])=>({id:nid(),x,P,f:1}));
   S.dists=p.d.map(([a,b,w1,w2])=>({id:nid(),a,b,w1,w2,f:1}));S.moments=p.m.map(([x,M])=>({id:nid(),x,M,f:1}));}
@@ -636,6 +650,89 @@ $('#steelBox').addEventListener('input',e=>{const t=e.target;if(t.id==='grade'){
   if(t.id==='Fy'){if(S.grade!=='custom')return;const v=parseFloat(t.value);if(isNaN(v))return;S.FyMan=v;save();renderSteel();return;}
   if(['Lb','Cb'].includes(t.id)){let v=parseFloat(t.value);if(isNaN(v))return;if(t.id==='Lb')v=clampL(v);S[t.id]=v;save();renderSteel();}});
 
+/* ---------- RC beam design — ACI 318 strength design (units: kg, cm) ---------- */
+const RB={SR24:2400,SD40:4000,SD50:5000};
+const rcOn=()=>S.Emode==='concrete'&&S.Itype==='rect';
+function rcParams(){
+  const v=secVals('rect'),b=+v.b,h=+v.h,fc=+S.fc,dc=+S.rcCover,d=h-dc;
+  const fy=RB[S.fyMain]||4000,fytRaw=RB[S.fyStir]||2400,fyt=Math.min(fytRaw,4200);
+  if(!(b>0&&h>0&&fc>0&&d>0))return {err:'ตรวจค่า b, h, fc′ และระยะ d′'};
+  const sq=Math.sqrt(fc),b1=Math.min(0.85,Math.max(0.65,0.85-0.05*(fc-280)/70));
+  const Vc=0.53*sq*b*d,phiVc=0.75*Vc,AvMin=Math.max(0.2*sq,3.5)*b/fyt; // cm²/cm
+  const rhoTC=0.85*b1*fc/fy*0.003/(0.003+0.005),AsMin=Math.max(0.8*sq/fy,14/fy)*b*d,AsMax=rhoTC*b*d;
+  const VsMax=2.1*sq*b*d;
+  const asReq=Mt=>{const Mu=Math.abs(Mt)*1e5;if(Mu<1e-6)return {As:0,ok:true};
+    const Rn=Mu/(0.9*b*d*d),disc=1-2*Rn/(0.85*fc);if(disc<0)return {As:NaN,ok:false};
+    const As=0.85*fc/fy*(1-Math.sqrt(disc))*b*d;return {As,ok:As<=AsMax+1e-9};};
+  const avReq=Vt=>{const Vu=Math.abs(Vt)*1000;
+    if(Vu<=phiVc/2)return {Av:0,ok:true,zone:0};
+    if(Vu<=phiVc)return {Av:AvMin*100,ok:true,zone:1};
+    const Vs=Vu/0.75-Vc;return {Av:Math.max(Vs/(fyt*d),AvMin)*100,ok:Vs<=VsMax,zone:2,Vs};};
+  return {b,h,d,dc,fc,fy,fyt,fytRaw,b1,Vc,phiVc,AvMin:AvMin*100,AsMin,AsMax,rhoTC,VsMax,asReq,avReq};
+}
+function rcCalc(){
+  if(!rcOn()||!R.stable)return null;const p=rcParams();if(p.err)return p;
+  const sm=R.samples,As=sm.map(s=>({x:s.x,v:Math.sign(s.M)*(p.asReq(s.M).As)})),Av=sm.map(s=>({x:s.x,v:p.avReq(s.V).Av}));
+  let bot={v:0,x:0},top={v:0,x:0},av={v:0,x:0},failM=false,failV=false,needV=false;
+  sm.forEach((s,i)=>{const a=p.asReq(s.M),q=p.avReq(s.V);if(!a.ok)failM=true;if(!q.ok)failV=true;if(q.zone===2)needV=true;
+    if(s.M>0&&a.As>bot.v)bot={v:a.As,x:s.x};if(s.M<0&&a.As>top.v)top={v:a.As,x:s.x};if(q.Av>av.v)av={v:q.Av,x:s.x};});
+  const Vu=Math.max(...sm.map(s=>Math.abs(s.V)));const VsAt=Vu*1000/0.75-p.Vc;
+  const sMax=Math.min(VsAt>1.06*Math.sqrt(p.fc)*p.b*p.d?p.d/4:p.d/2,VsAt>1.06*Math.sqrt(p.fc)*p.b*p.d?30:60);
+  return {...p,As,Av,bot,top,av,failM,failV,needV,Vu,sMax,hasNaN:As.some(a=>!isFinite(a.v))};
+}
+function rcPlotMarkup(id,c,W){
+  if(id==='sas'){const pts=c.As.map(a=>({x:a.x,v:isFinite(a.v)?a.v:0}));const m=diagramMarkup(pts,'var(--moment)',W,{flip:S.flip,h:170});
+    let g=m.g;[c.AsMin,-c.AsMin].forEach(v=>{const y=m.sy(v*m.sgn);if(y>18&&y<m.H-18)g+=ln(PL,y,W-PR,y,'var(--muted)',1,'stroke-dasharray="5 4"');});
+    const yb=m.sy(c.AsMin*m.sgn);if(yb>18&&yb<m.H-18)g+=tx(W-PR-4,yb-4,`As,min = ${fmt(c.AsMin,2)}`,'var(--muted)','end');
+    return {...m,g};}
+  const m=diagramMarkup(c.Av,'var(--shear)',W,{h:150});let g=m.g;
+  if(c.AvMin>0){const y=m.sy(c.AvMin);if(y>18&&y<m.H-18){g+=ln(PL,y,W-PR,y,'var(--muted)',1,'stroke-dasharray="5 4"');g+=tx(W-PR-4,y-4,`(Av/s)min = ${fmt(c.AvMin,2)}`,'var(--muted)','end');}}
+  return {...m,g};
+}
+function renderRC(){
+  const box=$('#rcBox');const on=rcOn()&&R.stable;box.hidden=!on;if(!on)return;
+  $('#rcCover').value=document.activeElement===$('#rcCover')?$('#rcCover').value:S.rcCover;$('#fyMain').value=S.fyMain;$('#fyStir').value=S.fyStir;
+  const c=rcCalc(),out=$('#rcSum');
+  if(!c||c.err){out.innerHTML=`<div class="empty">${c?c.err:''}</div>`;['sas','sav'].forEach(id=>{$('#'+id).innerHTML='';});return;}
+  ['sas','sav'].forEach(id=>{const svg=$('#'+id),W=plotW(svg),m=rcPlotMarkup(id,c,W);
+    svg.setAttribute('width',W);svg.setAttribute('height',m.H);svg.setAttribute('viewBox',`0 0 ${W} ${m.H}`);svg.innerHTML=m.g+`<g id="xh-${id}"></g>`;svg._sy=m.sy;svg._sgn=m.sgn;});
+  const chipV=c.failV?'<span class="chip fail">หน้าตัดเล็กเกินไป</span>':c.needV?'<span class="chip fail">ต้องเสริมเหล็กรับแรงเฉือน</span>':'<span class="chip pass">คอนกรีตรับได้</span>';
+  const chipM=c.failM?'<span class="chip fail">เกิน tension-controlled</span>':'<span class="chip pass">Singly reinforced ได้</span>';
+  out.innerHTML=`<div class="steel-grid">
+   <div class="chk-card"><div class="ck-h"><b>Shear</b>${chipV}</div>
+    <div class="ck-n"><div><span>V<sub>u,max</sub> = ${fmt(c.Vu,3)} tonf</span></div><div><span>φV<sub>c</sub> = ${fmt(c.phiVc/1000,3)} tonf</span></div><div><span>(A<sub>v</sub>/s)<sub>max</sub> = ${fmt(c.av.v,2)} cm²/m @ x = ${fmt(c.av.x)} m</span></div></div>
+    <div class="ck-r"><small>V<sub>c</sub> = 0.53√fc′·b·d · φ = 0.75 · f<sub>yt</sub> = ${fmtI(c.fyt)} ksc${c.fytRaw>4200?' (จำกัดที่ 4,200 ตาม ACI)':''} · s<sub>max</sub> = ${fmt(c.sMax,1)} cm</small></div></div>
+   <div class="chk-card"><div class="ck-h"><b>Moment</b>${chipM}</div>
+    <div class="ck-n"><div><span>A<sub>s</sub> ล่าง (M+) = ${fmt(c.bot.v,2)} cm² @ x = ${fmt(c.bot.x)} m</span></div><div><span>A<sub>s</sub> บน (M−) = ${fmt(c.top.v,2)} cm² @ x = ${fmt(c.top.x)} m</span></div><div><span>A<sub>s,min</sub> = ${fmt(c.AsMin,2)} · A<sub>s,max</sub> = ${fmt(c.AsMax,2)} cm²</span></div></div>
+    <div class="ck-r"><small>d = ${fmt(c.d,1)} cm · φ = 0.9 · f<sub>y</sub> = ${fmtI(c.fy)} ksc · β<sub>1</sub> = ${fmt(c.b1,3)} · A<sub>s,max</sub> ที่ ε<sub>t</sub> = 0.005</small></div></div></div>
+   <p class="hint">${c.failM?'ช่วงที่ A<sub>s</sub> เกิน A<sub>s,max</sub> (หรือหาค่าไม่ได้) ต้องใช้เหล็กรับแรงอัดหรือขยายหน้าตัด · ':''}${c.failV?'V<sub>s</sub> เกิน 2.1√fc′·b·d ต้องขยายหน้าตัด · ':''}ใช้ V<sub>u</sub> และ M<sub>u</sub> ตลอดคาน (ไม่ลดค่าที่ระยะ d จากหน้า support) · A<sub>s,min</sub> = max(0.8√fc′/f<sub>y</sub>, 14/f<sub>y</sub>)·b·d</p>`;
+}
+function rcReportHTML(n,imgs){
+  if(!rcOn())return '';const c=rcCalc();if(!c||c.err)return '';const ok=x=>x?'<b class="ok">OK</b>':'<b class="bad">NG</b>';
+  return `<div class="rs"><h3>${n}. ออกแบบเหล็กเสริมคอนกรีต — ACI 318 (strength design)</h3>
+   <div class="two"><div><table><tr><th class="l">ข้อมูล</th><th>ค่า</th><th class="l">หน่วย</th></tr>
+     <tr><td class="t">b × h</td><td>${fmt(c.b,1)} × ${fmt(c.h,1)}</td><td class="t l">cm</td></tr>
+     <tr><td class="t">d = h − d′</td><td>${fmt(c.d,1)}</td><td class="t l">cm</td></tr>
+     <tr><td class="t">fc′</td><td>${fmtI(c.fc)}</td><td class="t l">ksc</td></tr>
+     <tr><td class="t">f<sub>y</sub> เหล็กรับโมเมนต์ (${S.fyMain})</td><td>${fmtI(c.fy)}</td><td class="t l">ksc</td></tr>
+     <tr><td class="t">f<sub>yt</sub> เหล็กรับแรงเฉือน (${S.fyStir})</td><td>${fmtI(c.fyt)}</td><td class="t l">ksc</td></tr>
+     <tr><td class="t">β<sub>1</sub></td><td>${fmt(c.b1,3)}</td><td class="t l"></td></tr></table></div>
+   <div><table><tr><th class="l">ผลลัพธ์</th><th>ค่า</th><th class="l">หน่วย</th></tr>
+     <tr><td class="t">V<sub>u,max</sub></td><td>${fmt(c.Vu,3)}</td><td class="t l">tonf</td></tr>
+     <tr><td class="t">φV<sub>c</sub> = 0.75·0.53√fc′·b·d</td><td>${fmt(c.phiVc/1000,3)}</td><td class="t l">tonf</td></tr>
+     <tr><td class="t">(A<sub>v</sub>/s)<sub>max</sub></td><td>${fmt(c.av.v,2)}</td><td class="t l">cm²/m</td></tr>
+     <tr><td class="t">s<sub>max</sub></td><td>${fmt(c.sMax,1)}</td><td class="t l">cm</td></tr>
+     <tr><td class="t">A<sub>s</sub> ล่าง (M+)</td><td>${fmt(c.bot.v,2)}</td><td class="t l">cm²</td></tr>
+     <tr><td class="t">A<sub>s</sub> บน (M−)</td><td>${fmt(c.top.v,2)}</td><td class="t l">cm²</td></tr>
+     <tr><td class="t">A<sub>s,min</sub> / A<sub>s,max</sub></td><td>${fmt(c.AsMin,2)} / ${fmt(c.AsMax,2)}</td><td class="t l">cm²</td></tr>
+     <tr><td class="t">Shear / Moment</td><td>${ok(!c.failV)} / ${ok(!c.failM)}</td><td class="t l"></td></tr></table></div></div>
+   <div class="cap">เหล็กเสริมรับแรงเฉือนที่ต้องการ A<sub>v</sub>/s (cm²/m) — ${c.needV?'คอนกรีตรับไม่พอบางช่วง':'คอนกรีตรับแรงเฉือนได้ (เสริมขั้นต่ำเมื่อ V<sub>u</sub> > φV<sub>c</sub>/2)'}</div><img src="${imgs.sav}" alt="">
+   <div class="cap">เหล็กเสริมรับโมเมนต์ที่ต้องการ A<sub>s</sub> (cm²) — ${S.flip?'วาดด้านรับแรงดึง':'บวก = เหล็กล่าง, ลบ = เหล็กบน'}</div><img src="${imgs.sas}" alt=""></div>`;
+}
+$('#rcBox').addEventListener('input',e=>{const t=e.target;
+  if(t.id==='fyMain'||t.id==='fyStir'){S[t.id]=t.value;save();renderRC();return;}
+  if(t.id==='rcCover'){const v=parseFloat(t.value);if(isNaN(v))return;S.rcCover=v;save();renderRC();}});
+
 const fmt=(v,d=2)=>{if(!isFinite(v))return'—';const s=(Math.abs(v)<0.5*Math.pow(10,-d)?0:v).toFixed(d);return s.replace('-','−');};
 const fmtSci=v=>{if(!isFinite(v)||v===0)return '0';const e=Math.floor(Math.log10(Math.abs(v)));const sup='⁰¹²³⁴⁵⁶⁷⁸⁹';return (v/Math.pow(10,e)).toFixed(3)+' × 10'+String(e).split('').map(c=>c==='-'?'⁻':sup[c]).join('');};
 const fmtI=v=>isFinite(v)?Math.round(v).toLocaleString('en-US'):'—';
@@ -831,25 +928,26 @@ const fac=o=>{const f=parseFloat(o.f);return isFinite(f)?f:1;};
 const fstr=o=>Math.abs(fac(o)-1)>1e-12?` ×${+fac(o).toFixed(3)}`:'';
 function factored(){return {...S,points:S.points.map(p=>({...p,P:(+p.P||0)*fac(p)})),moments:S.moments.map(m=>({...m,M:(+m.M||0)*fac(m)})),
   dists:S.dists.map(d=>({...d,w1:(+d.w1||0)*fac(d),w2:(+d.w2||0)*fac(d)}))};}
-function update(){computeEI();R=solveBeam(factored());const Rs=solveBeam(S);R.svc=Rs;if(R.stable&&Rs.stable)R.defl=Rs.defl;save();renderSchematic();renderDiagrams();renderResults();renderSteel();drawHover();}
+function update(){computeEI();R=solveBeam(factored());const Rs=solveBeam(S);R.svc=Rs;if(R.stable&&Rs.stable)R.defl=Rs.defl;save();renderSchematic();renderDiagrams();renderResults();renderSteel();renderRC();drawHover();}
 
 /* hover crosshair */
 function drawHover(){
   const ro=$('#readout');
   if(hoverX==null||!R){ro.innerHTML=`<span><b>x</b>— m</span><span class="v"><b>V</b>— tonf</span><span class="m"><b>M</b>— tonf·m</span><span class="d"><b>δ</b>— cm</span><span style="font-family:var(--f-body);color:var(--muted)">เลื่อนเมาส์บนกราฟเพื่ออ่านค่า</span>`;
-    ['sch','sv','sm','sd'].forEach(id=>{const g=document.getElementById('xh-'+id);if(g)g.innerHTML='';});return;}
+    ['sch','sv','sm','sd','sav','sas'].forEach(id=>{const g=document.getElementById('xh-'+id);if(g)g.innerHTML='';});return;}
   const x=hoverX;let V=NaN,M=NaN,dv=NaN;
   if(R.stable){const r=R.VM(x,true);V=r.V;M=r.M;const nd=R.nodes;let i=0;while(i<nd.length-2&&nd[i+1]<x)i++;const t=(x-nd[i])/((nd[i+1]-nd[i])||1);dv=R.defl[i]+(R.defl[i+1]-R.defl[i])*Math.min(1,Math.max(0,t));}
   const toolName={pin:'Pin',roller:'Roller',fixed:'Fixed',point:'Point load',udl:'Distributed load',moment:'Moment'}[S.tool];
   ro.innerHTML=`<span><b>x</b>${fmt(x)} m</span><span class="v"><b>V</b>${fmt(V,3)} tonf</span><span class="m"><b>M</b>${fmt(M,3)} tonf·m</span><span class="d"><b>δ</b>${fmt(dv,3)} cm</span>`;
-  ['sch','sv','sm','sd'].forEach(id=>{const svg=$('#'+id),g=document.getElementById('xh-'+id);if(!g)return;const W=+svg.getAttribute('width'),H=+svg.getAttribute('height'),X=sxF(W)(x);
+  const rcp=rcOn()&&R.stable?rcParams():null;
+  ['sch','sv','sm','sd','sav','sas'].forEach(id=>{const svg=$('#'+id),g=document.getElementById('xh-'+id);if(!g)return;if((id==='sav'||id==='sas')&&(!rcp||rcp.err))return;const W=+svg.getAttribute('width'),H=+svg.getAttribute('height'),X=sxF(W)(x);
     let s=ln(X,6,X,H-6,'var(--accent)',1,'stroke-dasharray="3 3"');
     if(id==='sch'&&!drag){const rt=X>W-150;s+=`<text x="${rt?X-8:X+6}" y="${H-38}" style="fill:var(--accent);font-family:var(--f-body);font-size:11.5px" text-anchor="${rt?'end':'start'}">${udl?'ลากเพื่อกำหนดช่วง w':'+ '+toolName}</text>`;}
-    if(id!=='sch'&&svg._sy&&R.stable){const v=id==='sv'?V:id==='sm'?M:dv;s+=`<circle cx="${X}" cy="${svg._sy(v*svg._sgn)}" r="3.5" style="fill:var(--panel);stroke:var(--accent);stroke-width:1.6"/>`;}
+    if(id!=='sch'&&svg._sy&&R.stable){const v=id==='sv'?V:id==='sm'?M:id==='sd'?dv:id==='sav'?rcp.avReq(V).Av:Math.sign(M)*(rcp.asReq(M).As||0);s+=`<circle cx="${X}" cy="${svg._sy(v*svg._sgn)}" r="3.5" style="fill:var(--panel);stroke:var(--accent);stroke-width:1.6"/>`;}
     g.innerHTML=s;});
 }
 function xFromEvent(svg,e){const r=svg.getBoundingClientRect(),W=+svg.getAttribute('width');const px=(e.clientX-r.left)*W/r.width;return (px-PL)/(W-PL-PR)*R.L;}
-['sv','sm','sd','sch'].forEach(id=>{const svg=$('#'+id);
+['sv','sm','sd','sch','sav','sas'].forEach(id=>{const svg=$('#'+id);
   svg.addEventListener('pointermove',e=>{const x=xFromEvent(svg,e);if(id==='sch'||drag||udl)hoverX=snapX(x);else hoverX=Math.min(R.L,Math.max(0,x));
     if(drag){const o=S[drag.kind].find(o=>o.id==drag.id);if(o&&o.x!==hoverX){o.x=hoverX;const inp=document.getElementById(`${drag.kind}-${o.id}-x`);if(inp)inp.value=(+o.x).toFixed(2);requestUpdate();}return;}
     if(udl){udl.b=hoverX;renderSchematic();}
@@ -889,7 +987,8 @@ let dlNS;const getDl=async()=>{if(dlNS)return dlNS;try{dlNS=(window.claude&&wind
 async function buildReport(){
   const W=760,rep=$('#rep');const today=new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'});
   const imgSch=await svgToPng(schematicMarkup(W,false),W,SCH_H);
-  const imgs={};for(const id of ['sv','sm','sd']){const d=DIAG[id](),m=diagramMarkup(d.pts,d.color,W,d.opt);imgs[id]=await svgToPng(m.g,W,m.H);}
+  const imgs={};if(rcOn()){const rc=rcCalc();if(rc&&!rc.err)for(const id of ['sav','sas']){const m=rcPlotMarkup(id,rc,W);imgs[id]=await svgToPng(m.g,W,m.H);}}
+  for(const id of ['sv','sm','sd']){const d=DIAG[id](),m=diagramMarkup(d.pts,d.color,W,d.opt);imgs[id]=await svgToPng(m.g,W,m.H);}
   const sorted=[...R.sups].sort((a,b)=>a.xc-b.xc),e=extremes(),ok=eqOk();
   const rows=(arr,f)=>arr.length?arr.map(f).join(''):'<tr><td class="t" colspan="5">—</td></tr>';
   rep.innerHTML=`
@@ -916,9 +1015,9 @@ async function buildReport(){
     <p style="margin-top:6px">ตรวจสมดุล (factored): ΣR<sub>y</sub> = ${fmt(R.sumR,3)} tonf, Σ น้ำหนัก = ${fmt(R.sumLoad,3)} tonf (ΣP = ${fmt(R.sumLoad-R.W,3)}, Σw = ${fmt(R.W,3)}) · ΣM รอบ x = 0 = ${fmt(R.sumM0,4)} tonf·m <b class="${ok?'ok':'bad'}">${ok?'สมดุล OK':'ไม่สมดุล'}</b></p></div>
   <div class="rs"><h3>4. Shear force diagram, V<sub>u</sub> (tonf) — factored load</h3><img src="${imgs.sv}" alt=""></div>
   <div class="rs"><h3>5. Bending moment diagram, M<sub>u</sub> (tonf·m) — factored load</h3><img src="${imgs.sm}" alt=""><div class="cap">${S.flip?'วาดด้านรับแรงดึง (tension side): โมเมนต์บวกอยู่ใต้แกน':'โมเมนต์บวก (sagging) อยู่เหนือแกน'}</div></div>
-  ${steelReportHTML(6)}
-  <div class="rs"><h3>${STEEL.includes(S.Itype)?7:6}. Deflection, δ (cm) — service load</h3><img src="${imgs.sd}" alt=""></div>
-  <div class="rs"><h3>${STEEL.includes(S.Itype)?8:7}. สรุปค่าสูงสุด</h3>
+  ${steelReportHTML(6)}${rcReportHTML(6,imgs)}
+  <div class="rs"><h3>${STEEL.includes(S.Itype)||rcOn()?7:6}. Deflection, δ (cm) — service load</h3><img src="${imgs.sd}" alt=""></div>
+  <div class="rs"><h3>${STEEL.includes(S.Itype)||rcOn()?8:7}. สรุปค่าสูงสุด</h3>
     <table><tr><th class="l">รายการ</th><th>ค่า</th><th class="l">หน่วย</th><th>ที่ x (m)</th></tr>
       <tr><td class="t">V<sub>max</sub> (+)</td><td>${fmt(e.vM.V,3)}</td><td class="t l">tonf</td><td>${fmt(e.vM.x)}</td></tr>
       <tr><td class="t">V<sub>min</sub> (−)</td><td>${fmt(e.vm.V,3)}</td><td class="t l">tonf</td><td>${fmt(e.vm.x)}</td></tr>
