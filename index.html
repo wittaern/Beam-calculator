@@ -184,10 +184,8 @@ main{display:flex;flex-direction:column;gap:12px;min-width:0}
           <option value="fixed">Fixed–fixed, point load</option>
         </select>
       </label>
-      <button class="btn" id="pdfBtn"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8M4.5 6.5 8 10l3.5-3.5M3 13h10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>รายการคำนวณ PDF</button>
     </div>
   </header>
-  <div class="status" id="pdfStatus" role="status"></div>
 
   <div class="app">
     <aside class="rail">
@@ -195,8 +193,8 @@ main{display:flex;flex-direction:column;gap:12px;min-width:0}
         <h2>งานที่บันทึกไว้ <button class="add" id="pNew">เริ่มงานใหม่</button></h2>
         <div class="prow"><input class="txt" id="pName" type="text" placeholder="ชื่องาน" aria-label="ชื่องาน"><button class="sbtn" id="pSave">บันทึก</button></div>
         <div class="prow"><select id="pList" aria-label="งานที่บันทึกไว้"></select><button class="sbtn" id="pOpen">เปิด</button><button class="sbtn ghost" id="pDel">ลบ</button></div>
-        <div class="prow"><button class="sbtn ghost" id="pExport">บันทึกเป็นไฟล์</button><button class="sbtn ghost" id="pImport">เปิดไฟล์</button><input type="file" id="pFile" accept=".html,.htm,.json,text/html,application/json" hidden></div>
-        <p class="hint" id="pMsg">งานในรายการเก็บไว้ในเบราว์เซอร์นี้ · ไฟล์ .beam.html ดับเบิลคลิกเปิดได้ทุกเครื่อง</p>
+        <div class="prow"><button class="sbtn ghost" id="pExport">บันทึกไฟล์ (PDF + HTML)</button><button class="sbtn ghost" id="pImport">เปิดไฟล์</button><input type="file" id="pFile" accept=".html,.htm,.json,text/html,application/json" hidden></div>
+        <p class="hint" id="pMsg">งานในรายการเก็บไว้ในเบราว์เซอร์นี้ · บันทึกไฟล์ได้ 2 ไฟล์: รายการคำนวณ .pdf และไฟล์งาน .beam.html (ดับเบิลคลิกเพื่อเปิดแก้ต่อ)</p>
       </section>
       <section class="box">
         <h2>ข้อมูลรายการคำนวณ</h2>
@@ -1058,17 +1056,13 @@ async function buildReport(){
   return rep;
 }
 
-async function exportPDF(){
-  const btn=$('#pdfBtn'),st=$('#pdfStatus');
-  if(!R.stable){st.textContent='ยังสร้าง PDF ไม่ได้: '+R.reason;return;}
-  btn.disabled=true;st.textContent='กำลังสร้าง PDF…';
+async function makePDF(){
+  await Promise.all([loadScript(LIB_JSPDF),loadScript(LIB_H2C)]);
+  if(document.fonts&&document.fonts.ready)await document.fonts.ready;
+  const rep=await buildReport();
   try{
-    await getDl();
-    await Promise.all([loadScript(LIB_JSPDF),loadScript(LIB_H2C)]);
-    if(document.fonts&&document.fonts.ready)await document.fonts.ready;
-    const rep=await buildReport();
     const {jsPDF}=window.jspdf;const pdf=new jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
-    const M=12,PW=210-2*M,PH=297-2*M-6,mmPerPx=PW/760;
+    const M=12,PW=210-2*M,PH=297-2*M-6;
     const blocks=[...rep.querySelectorAll('.rs')];let y=M,first=true;
     for(const b of blocks){
       const c=await html2canvas(b,{scale:2.5,backgroundColor:'#ffffff',logging:false,useCORS:true,onclone:doc=>{const r=doc.getElementById('rep');if(r){r.style.left='0px';r.style.top='0px';}}});
@@ -1078,18 +1072,14 @@ async function exportPDF(){
     }
     const n=pdf.getNumberOfPages(),label=[S.proj,S.member].filter(Boolean).join(' / ').replace(/[^\x20-\x7E]/g,'').trim();
     for(let i=1;i<=n;i++){pdf.setPage(i);pdf.setFontSize(8);pdf.setTextColor(120);pdf.text(`Page ${i} / ${n}`,210-M,297-8,{align:'right'});if(label)pdf.text(label,M,297-8);}
-    rep.innerHTML='';
-    const d=new Date(),stamp=`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
-    const safe=(S.member||'beam').replace(/[\\/:*?"<>|]+/g,'-').trim()||'beam';
-    const fname=`${safe}-calc-${stamp}.pdf`,blob=pdf.output('blob');
-    if(dlNS){st.textContent='เลือกบันทึกไฟล์ในหน้าต่างยืนยัน…';await dlNS.save({filename:fname,data:blob});st.textContent='บันทึก PDF แล้ว';}
-    else{const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=fname;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);st.textContent='ดาวน์โหลด '+fname+' แล้ว (ดูในโฟลเดอร์ Downloads)';}
-  }catch(err){
-    const code=err&&err.code;
-    st.textContent=code==='declined'?'ยกเลิกการบันทึกไฟล์':code==='rate_limited'?'มีหน้าต่างบันทึกเปิดค้างอยู่ ลองใหม่อีกครั้ง':code?'บันทึกไม่ได้ ('+code+')':'สร้าง PDF ไม่สำเร็จ: '+(err&&err.message||err);
-  }finally{btn.disabled=false;}
+    return pdf.output('blob');
+  }finally{rep.innerHTML='';}
 }
-$('#pdfBtn').addEventListener('click',exportPDF);
+async function saveBlob(fname,blob){
+  await getDl();
+  if(dlNS){await dlNS.save({filename:fname,data:blob});return 'saved';}
+  const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=fname;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);return 'downloaded';
+}
 
 /* ---------- Save / open jobs ---------- */
 const SITE='https://wittaern.github.io/Beam-calculator/';
@@ -1130,13 +1120,19 @@ $('#pNew').addEventListener('click',()=>{
   newArm=false;$('#pNew').textContent='เริ่มงานใหม่';const keep={Emode:S.Emode,fc:S.fc,Itype:S.Itype,sec:S.sec};
   S=JSON.parse(JSON.stringify(DEF));Object.assign(S,keep);loadPreset('simple');S.Lb=S.L;syncGlobals();renderTools();renderTables();update();$('#pName').value='';renderJobs();pmsg('เริ่มงานใหม่แล้ว');});
 $('#pExport').addEventListener('click',async()=>{
+  const btn=$('#pExport');if(btn.disabled)return;btn.disabled=true;
   const name=(($('#pName').value||'').trim()||jobName()).replace(/[\\/:*?"<>|]+/g,'-');
   const job={app:'beam-vm',version:1,savedAt:new Date().toISOString(),name,data:snapshot()};
-  const blob=new Blob([jobHTML(job)],{type:'text/html'});
-  const fname=`${name}.beam.html`;await getDl();
-  try{if(dlNS){await dlNS.save({filename:fname,data:blob});pmsg(`บันทึกไฟล์ ${fname} แล้ว`);}
-    else{const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=fname;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);pmsg(`ดาวน์โหลด ${fname} แล้ว`);}}
-  catch(err){pmsg(err&&err.code==='declined'?'ยกเลิกการบันทึกไฟล์':'บันทึกไฟล์ไม่ได้ ('+(err&&err.code||err)+')');}});
+  const done=[],msgs=[];const why=err=>err&&err.code==='declined'?'ยกเลิก':err&&err.code?err.code:(err&&err.message)||String(err);
+  try{
+    let pdfBlob=null;
+    if(R.stable){pmsg('กำลังสร้าง PDF…');try{pdfBlob=await makePDF();}catch(err){msgs.push('สร้าง PDF ไม่สำเร็จ: '+why(err));}}
+    else msgs.push('ไม่ได้สร้าง PDF เพราะ'+R.reason);
+    pmsg('เลือกบันทึกไฟล์ในหน้าต่างยืนยัน…');
+    try{await saveBlob(`${name}.beam.html`,new Blob([jobHTML(job)],{type:'text/html'}));done.push(`${name}.beam.html`);}catch(err){msgs.push('HTML: '+why(err));}
+    if(pdfBlob){try{await saveBlob(`${name}.pdf`,pdfBlob);done.push(`${name}.pdf`);}catch(err){msgs.push('PDF: '+why(err));}}
+    pmsg((done.length?'บันทึก '+done.join(' และ ')+' แล้ว':'ยังไม่ได้บันทึกไฟล์')+(msgs.length?' · '+msgs.join(' · '):''));
+  }finally{btn.disabled=false;}});
 $('#pImport').addEventListener('click',()=>$('#pFile').click());
 $('#pFile').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();
   rd.onload=()=>{try{const j=jobFromText(String(rd.result));const d=j&&j.app==='beam-vm'?j.data:j;if(!d||!Array.isArray(d.supports))throw 0;
